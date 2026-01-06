@@ -5,3 +5,7 @@ cityscale
 *.png
 
 xian
+checkpoints
+save
+*.pth
+*.ckpt
