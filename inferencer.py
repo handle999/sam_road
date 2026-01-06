@@ -7,7 +7,9 @@ import cv2
 from utils import load_config, create_output_dir_and_save_config
 from dataset import cityscale_data_partition, read_rgb_img, get_patch_info_one_img
 from dataset import spacenet_data_partition
-from model import SAMRoad
+from model import SAMRoad   # 如果使用其他模型，请取消相应的注释
+# from model_contra import SAMRoad
+# from model_contra_graphtransformer import SAMRoad
 import graph_extraction
 import graph_utils
 import triage
@@ -119,6 +121,7 @@ def infer_one_img(net, img, config):
     
     ## Extract sample points from masks
     graph_points = graph_extraction.extract_graph_points(fused_keypoint_mask, fused_road_mask, config)
+    print(graph_points.shape[0])    # hhy add 0707
     if graph_points.shape[0] == 0:
         return graph_points, np.zeros((0, 2), dtype=np.int32), fused_keypoint_mask, fused_road_mask
 
@@ -174,7 +177,7 @@ def infer_one_img(net, img, config):
             topo_data['pairs'].append(pairs)
             topo_data['valid'].append(valid)
             idx_maps.append(idx_patch2all)
-        
+
         # collate
         collated = {}
         for key, x_list in topo_data.items():
@@ -224,18 +227,15 @@ def infer_one_img(net, img, config):
     pred_edges = []
     for edge, score_sum in edge_scores.items():
         score = score_sum / edge_counts[edge] 
+        print(edge, score)  # hhy add 0707
         if score > config.TOPO_THRESHOLD:
             pred_edges.append(edge)
     pred_edges = np.array(pred_edges).reshape(-1, 2)
     pred_nodes = graph_points[:, ::-1]  # to rc
     
-    
-
     return pred_nodes, pred_edges, fused_keypoint_mask, fused_road_mask
 
     
-
-
 if __name__ == "__main__":
     config = load_config(args.config)
     
@@ -261,6 +261,18 @@ if __name__ == "__main__":
         _, _, test_img_indices = spacenet_data_partition()
         rgb_pattern = './spacenet/RGB_1.0_meter/{}__rgb.png'
         gt_graph_pattern = './spacenet/RGB_1.0_meter/{}__gt_graph.p'
+    elif config.DATASET == 'xian':
+        # def spacenet_data_partition():
+        # dataset partition
+        with open('./xian/data_split.json','r') as jf:
+            import json
+            data_list = json.load(jf)
+            train_img_indices = data_list['train']
+            val_img_indices = data_list['validation']
+            test_img_indices = data_list['test']
+
+        rgb_pattern = './xian/RGB/region_{}_sat.png'
+        gt_graph_pattern = './xian/RGB/region_{}_graph_gt.pickle'
     
     output_dir_prefix = './save/infer_'
     if args.output_dir:
@@ -286,7 +298,7 @@ if __name__ == "__main__":
         if len(gt_nodes) == 0:
             gt_nodes = np.zeros([0, 2], dtype=np.float32)
 
-        if config.DATASET == 'spacenet':
+        if config.DATASET == 'spacenet' or config.DATASET == 'xian':
             # convert ??? -> xy -> rc
             gt_nodes = np.stack([gt_nodes[:, 1], 400 - gt_nodes[:, 0]], axis=1)
             gt_nodes = gt_nodes[:, ::-1]
@@ -329,7 +341,7 @@ if __name__ == "__main__":
         cv2.imwrite(os.path.join(viz_save_dir, f'{img_id}.png'), viz_img)
 
         # Saves the large map
-        if config.DATASET == 'spacenet':
+        if config.DATASET == 'spacenet' or config.DATASET == 'xian':
             # r, c -> ???
             pred_nodes = np.stack([400 - pred_nodes[:, 0], pred_nodes[:, 1]], axis=1)
         large_map_sat2graph_format = graph_utils.convert_to_sat2graph_format(pred_nodes, pred_edges)

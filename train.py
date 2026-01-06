@@ -81,7 +81,11 @@ if __name__ == "__main__":
         collate_fn=graph_collate_fn,
     )
 
-    checkpoint_callback = ModelCheckpoint(every_n_epochs=1, save_top_k=-1)
+    checkpoint_callback = ModelCheckpoint(
+        dirpath="checkpoints/samroad/",          # 自定义保存目录
+        every_n_epochs=1, 
+        save_top_k=-1
+    )
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
     wandb_logger = WandbLogger()
