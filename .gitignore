@@ -9,3 +9,5 @@ checkpoints
 save
 *.pth
 *.ckpt
+
+train_logs
