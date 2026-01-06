@@ -3,6 +3,14 @@ import sys
 import math
 import json 
 
+# import sys
+# print("Args:", sys.argv)
+# if len(sys.argv) < 3:
+#     print("Error: Need at least 2 arguments.")
+#     sys.exit(1)
+# f_in = sys.argv[1]
+# f_out = sys.argv[2]
+
 lat_top_left = 41.0 
 lon_top_left = -71.0 
 min_lat = 41.0 

@@ -24,6 +24,11 @@ for file_name in os.listdir(f'../{args.savedir}/results/topo'):
     # print(file_name,topo[-1])
 topo = 2*np.mean(precision)*np.mean(recall)/(np.mean(precision)+np.mean(recall))
 print('TOPO',topo,'Precision',np.mean(precision),'Recall',np.mean(recall))
-with open(f'../{args.savedir}/topo.json','w') as jf:
+
+save_dir = os.path.join('..', args.savedir, 'results')
+os.makedirs(save_dir, exist_ok=True)  # 保证目录存在
+out_path = os.path.join(save_dir, 'topo.json')  # 用 join 保证平台兼容性
+print(out_path)
+with open(out_path,'w') as jf:
     json.dump({'mean topo':[topo,np.mean(precision),np.mean(recall)],'prec':precision,'recall':recall,'f1':topo},jf)
 

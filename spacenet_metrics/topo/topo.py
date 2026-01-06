@@ -9,7 +9,8 @@ import random
 import showTOPO
 from rtree import index
 from time import time 
-from hopcroftkarp import HopcroftKarp
+# from hopcroftkarp import HopcroftKarp
+from HopcroftKarp import HopcroftKarpCount
 from subprocess import Popen
 
 
@@ -804,9 +805,11 @@ def TOPOWithPairs(GPSMap, OSMMap, GPSList, OSMList, step = 0.00005, r = 0.00300,
         soft_matchedNum = 0
 
         if one2oneMatching == True:
-            matches = HopcroftKarp(bigraph).maximum_matching()
+            # matches = HopcroftKarp(bigraph).maximum_matching()
 
-            matchedNum = len(matches.keys()) / 2
+            # matchedNum = len(matches.keys()) / 2
+            # 匈牙利算法实现有些老了，现在下载不到库，所以使用networkx的实现
+            matchedNum = HopcroftKarpCount(bigraph)
 
             # for k,v in matches.items():
             # 	if (k,v) in cost_map.keys():
@@ -882,9 +885,13 @@ def TOPOWithPairs(GPSMap, OSMMap, GPSList, OSMList, step = 0.00005, r = 0.00300,
         if one2oneMatching == True:
             #matchedNum = len(HopcroftKarp(bigraph).maximum_matching().keys()) / 2
 
-            matches = HopcroftKarp(bigraph).maximum_matching()
+            # hhy change
+            # 匈牙利算法实现有些老了，现在下载不到库，所以使用networkx的实现
+            # matches = HopcroftKarp(bigraph).maximum_matching()
 
-            matchedNum = len(matches.keys()) / 2
+            # matchedNum = len(matches.keys()) / 2
+            # hhy change
+            matchedNum = HopcroftKarpCount(bigraph)
 
             # for k,v in matches.items():
             # 	if (k,v) in cost_map.keys():

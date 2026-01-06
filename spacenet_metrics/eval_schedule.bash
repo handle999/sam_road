@@ -2,8 +2,9 @@
 
 # List of directories to process, add more as needed
 output_dirs=(
-    "spacenet_toponet_8x8"
-    "spacenet_toponet_4x4"
+    # "spacenet_toponet_8x8"
+    # "spacenet_toponet_4x4"
+    "infer__20250617_184944/graph"
 )
 
 # Base directory where the output directories are located
