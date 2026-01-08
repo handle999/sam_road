@@ -50,7 +50,8 @@ if __name__ == "__main__":
         # track hyperparameters and run metadata
         config=config,
         # disable wandb if debugging
-        mode='disabled' if dev_run else None
+        # mode='disabled' if dev_run else None
+        mode='offline'
     )
 
 
@@ -82,7 +83,7 @@ if __name__ == "__main__":
     )
 
     checkpoint_callback = ModelCheckpoint(
-        dirpath="checkpoints/samroad/",          # 自定义保存目录
+        dirpath="checkpoints/samroad_cityscale/",          # 自定义保存目录
         every_n_epochs=1, 
         save_top_k=-1
     )

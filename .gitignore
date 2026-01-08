@@ -5,9 +5,12 @@ cityscale
 *.png
 
 xian
+chengdu
+
 checkpoints
 save
 *.pth
 *.ckpt
 
 train_logs
+wandb

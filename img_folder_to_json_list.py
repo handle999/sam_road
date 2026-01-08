@@ -75,15 +75,15 @@ def generate_data_split_from_cases(
 
 if __name__ == "__main__":
     # ======= 你只需要改这里 =======
-    data_root = "./xian/RGB"
+    data_root = "./xian/xian_2019_400/"
     save_path = "./xian/data_split.json"
 
     generate_data_split_from_cases(
         data_root=data_root,
         save_path=save_path,
-        train_ratio=0,
-        val_ratio=0,
-        test_ratio=1.0,
+        train_ratio=0.8,
+        val_ratio=0.1,
+        test_ratio=0.1,
         case_regex=r"region_(\d+)",  # 关键：定义 case 解析规则
         seed=42
     )
