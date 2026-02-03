@@ -27,6 +27,9 @@ def statistics(traj_dir):
         trajs = parse_traj_file(os.path.join(traj_dir, filename))
         tot_trajs += len(trajs)
         for traj in trajs:
+            if len(traj.pt_list) <= 1:  # hhy add 2026/01/15
+                continue
+            # print(filename, traj.oid)
             oids.add(traj.oid)
             nb_pts = len(traj.pt_list)
             tot_pts += nb_pts
