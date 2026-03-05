@@ -1,3 +1,24 @@
+# 1. 字段
+
+```txt
+字段位置,样例值,对应代码变量,含义解析
+0,#,-,轨迹开始标记。
+1,1db9f...071340,traj.tid,轨迹ID (Trajectory ID)：通常由 OID + 起始时间 + 结束时间拼接而成，保证全局唯一。
+2,1db9f3...008a62,traj.oid,对象ID (Object ID)：通常是加密后的用户ID或车辆ID。
+3,2018/09/30 07:05:55,pt_list[0].time,开始时间。
+4,2018/09/30 07:13:40,pt_list[-1].time,结束时间。
+5,2.6022 km,traj.get_length(),轨迹总长度。
+
+索引,样例值,对应代码变量,含义解析
+0,2018/09/30 07:05:55,pt.time,时间戳：当前采样点的时间。
+1,34.2799809,pt.lat,原始纬度：GPS观测的真实纬度。
+2,108.9424189,pt.lng,原始经度：GPS观测的真实经度。
+3,2979,candi_pt.eid,路段ID (Edge ID)：该点被算法匹配到的底层路网路段编号。
+4,34.2799818,candi_pt.lat,投影纬度：将GPS点垂直投影到匹配路段上的纬度坐标。
+5,108.9424751,candi_pt.lng,投影经度：将GPS点垂直投影到匹配路段上的经度坐标。
+6,5.16,candi_pt.error,匹配误差：原始GPS点距离投影点（路网）的直线物理距离（米）。
+7,201.84,candi_pt.offset,路段偏移量：投影点距离当前路段 (eid) 起点（上一个路口）的沿着道路走过的距离（米）。这个值在计算寻路距离时非常关键。
+```
 
 ```shell
 conda install gdal "numpy<2.0"
@@ -171,3 +192,28 @@ Namespace(input='../chengdu/seg_mm_traj', output='../chengdu/seg_mm_traj_csv')
 [INFO] All files processed successfully.
 
 ```
+
+# traj to path
+
+Note: the enter time of the first path entity & the leave time of the last path entity is not accurate
+原来的 `osm2rn/osm_to_rn.py` 存在问题，会覆盖双向道路，所以重新写了一个 `osm2rn/osm_to_rn_double.py` ，这样生成的没啥问题
+等一下还是有问题，eid编号不一致了，所以得用原始 map matching 使用的 shpfile 去进行获取。这样才会完全没问题
+
+```shell
+cd ./utils
+
+python -m tptk.main --phase construct_path --mm_traj_dir ../xian/seg_mm_traj_5 --path_output_dir ../xian/seg_mm_path_5 --rn_path ../xian/osm/rn-comp-xa-190101-didi/edges.shp
+
+(SAM) E:\School\2025\20250311Road\GraphBased\sam_road\utils>python -m tptk.main --phase construct_path --mm_traj_dir ../xian/seg_mm_traj_5 --path_output_dir ../xian/seg_mm_path_5 --rn_path ../xian/osm/rn-comp-xa-190101-didi/edges.shp
+Namespace(tdrive_root_dir=None, clean_traj_dir=None, rn_path='../xian/osm/rn-comp-xa-190101-didi/edges.shp', mm_traj_dir='../xian/seg_mm_traj_5', segment_output_dir=None, path_output_dir='../xian/seg_mm_path_5', phase='construct_path')
+Loading road network from ../xian/osm/rn-comp-xa-190101-didi/edges.shp...
+C:\Users\Highee\.conda\envs\SAM\lib\site-packages\osgeo\ogr.py:593: FutureWarning: Neither ogr.UseExceptions() nor ogr.DontUseExceptions() has been explicitly called. In GDAL 4.0, exceptions will be enabled by default.
+  warnings.warn(
+# of nodes:4764
+# of edges:10760
+Start constructing paths from ../xian/seg_mm_traj_5...
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1428/1428 [3:36:05<00:00,  9.08s/it]
+Route construction done.
+```
+
+
