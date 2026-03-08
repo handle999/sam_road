@@ -30,3 +30,14 @@ utils/tptk/common/hhy_merge_csv.py
 总计合并轨迹数: 148747
 
 ```
+
+补充实现把path转为csv的函数
+
+```shell
+utils/tptk/common/hhy_path_txt_to_csv.py
+
+```
+
+```shell
+
+```

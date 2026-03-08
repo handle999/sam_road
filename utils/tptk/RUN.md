@@ -200,6 +200,13 @@ Note: the enter time of the first path entity & the leave time of the last path 
 等一下还是有问题，eid编号不一致了，所以得用原始 map matching 使用的 shpfile 去进行获取。这样才会完全没问题
 
 ```shell
+# AttributeError: module 'networkx' has no attribute 'read_shp'
+# 需要 networkx < 3
+conda install networkx=2.8
+```
+
+
+```shell
 cd ./utils
 
 python -m tptk.main --phase construct_path --mm_traj_dir ../xian/seg_mm_traj_5 --path_output_dir ../xian/seg_mm_path_5 --rn_path ../xian/osm/rn-comp-xa-190101-didi/edges.shp
@@ -214,6 +221,104 @@ C:\Users\Highee\.conda\envs\SAM\lib\site-packages\osgeo\ogr.py:593: FutureWarnin
 Start constructing paths from ../xian/seg_mm_traj_5...
 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1428/1428 [3:36:05<00:00,  9.08s/it]
 Route construction done.
+
+(SAM) hanhaoyu@debian:~/sam_road/utils$ python -m tptk.main --phase construct_path --mm_traj_dir ../xian/seg_mm_traj_5 --path_output_dir ../xian/seg_mm_path_5 --rn_path ../xian/osm/rn-comp-xa-190101-didi/edges.shp
+Namespace(tdrive_root_dir=None, clean_traj_dir=None, rn_path='../xian/osm/rn-comp-xa-190101-didi/edges.shp', mm_traj_dir='../xian/seg_mm_traj_5', segment_output_dir=None, path_output_dir='../xian/seg_mm_path_5', phase='construct_path')
+Loading road network from ../xian/osm/rn-comp-xa-190101-didi/edges.shp...
+# of nodes:4764
+# of edges:10760
+Start constructing paths from ../xian/seg_mm_traj_5...
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1428/1428 [3:13:59<00:00,  8.15s/it]
+Route construction done.
 ```
 
+```shell
+python -m tptk.main --phase construct_path --mm_traj_dir ../xian/filtered_mm_traj --path_output_dir ../xian/filtered_mm_path --rn_path ../xian/osm/rn-comp-xa-190101-didi/edges.shp
 
+(SAM) hanhaoyu@debian:~/sam_road/utils$ python -m tptk.main --phase construct_path --mm_traj_dir ../xian/filtered_mm_traj --path_output_dir ../xian/filtered_mm_path --rn_path ../xian/osm/rn-comp-xa-190101-didi/edges.shp
+Namespace(tdrive_root_dir=None, clean_traj_dir=None, rn_path='../xian/osm/rn-comp-xa-190101-didi/edges.shp', mm_traj_dir='../xian/filtered_mm_traj', segment_output_dir=None, path_output_dir='../xian/filtered_mm_path', phase='construct_path')
+Loading road network from ../xian/osm/rn-comp-xa-190101-didi/edges.shp...
+# of nodes:4764
+# of edges:10760
+Start constructing paths from ../xian/filtered_mm_traj...
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1428/1428 [3:14:26<00:00,  8.17s/it]
+Route construction done.
+```
+
+# path to csv (LineString)
+
+## seg_mm_5
+```shell
+cd ./utils
+
+python -m tptk.common.hhy_path_txt_to_csv \
+    -i ../xian/seg_mm_path_5 \
+    -o ../xian/seg_mm_path_5_csv \
+    --rn_path ../xian/osm/rn-comp-xa-190101-didi/edges.shp
+
+(SAM) hanhaoyu@debian:~/sam_road/utils$ python -m tptk.common.hhy_path_txt_to_csv \
+    -i ../xian/seg_mm_path_5 \
+    -o ../xian/seg_mm_path_5_csv \
+    --rn_path ../xian/osm/rn-comp-xa-190101-didi/edges.shp
+Namespace(input='../xian/seg_mm_path_5', output='../xian/seg_mm_path_5_csv', rn_path='../xian/osm/rn-comp-xa-190101-didi/edges.shp')
+[INFO] Loading road network from ../xian/osm/rn-comp-xa-190101-didi/edges.shp...
+[INFO] Loaded 10760 edges with geometries.
+Converting Paths to CSV: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1427/1427 [1:28:02<00:00,  3.70s/it]
+
+[INFO] All files processed successfully.
+```
+
+## filtered_mm
+```shell
+python -m tptk.common.hhy_path_txt_to_csv \
+    -i ../xian/filtered_mm_path \
+    -o ../xian/filtered_mm_path_csv \
+    --rn_path ../xian/osm/rn-comp-xa-190101-didi/edges.shp
+
+(SAM) hanhaoyu@debian:~/sam_road/utils$ python -m tptk.common.hhy_path_txt_to_csv \
+    -i ../xian/filtered_mm_path \
+    -o ../xian/filtered_mm_path_csv \
+    --rn_path ../xian/osm/rn-comp-xa-190101-didi/edges.shp
+Namespace(input='../xian/filtered_mm_path', output='../xian/filtered_mm_path_csv', rn_path='../xian/osm/rn-comp-xa-190101-didi/edges.shp')
+[INFO] Loading road network from ../xian/osm/rn-comp-xa-190101-didi/edges.shp...
+[INFO] Loaded 10760 edges with geometries.
+Converting Paths to CSV: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1427/1427 [1:27:41<00:00,  3.69s/it]
+
+[INFO] All files processed successfully.
+```
+
+# path to shp
+
+## seg_mm_5
+```shell
+python -m tptk.common.hhy_extract_active_shp \
+    --path_dir ../xian/seg_mm_path_5 \
+    --in_shp ../xian/osm/rn-comp-xa-190101-didi/edges.shp \
+    --out_shp ../xian/osm/rn-comp-xa-190101-seg5/edges.shp
+
+(SAM) hanhaoyu@debian:~/sam_road/utils$ python -m tptk.common.hhy_extract_active_shp --path_dir ../xian/seg_mm_path_5 --in_shp ../xian/osm/rn-comp-xa-190101-didi/edges.shp --out_shp ../xian/osm/rn-comp-xa-190101-active/edges.shp
+[INFO] Scanning ../xian/seg_mm_path_5 for active edge IDs...
+Parsing Paths: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1427/1427 [02:21<00:00, 10.08it/s]
+[INFO] Found 8839 unique active eids.
+[INFO] Created output directory: ../xian/osm/rn-comp-xa-190101-active
+[INFO] Extracting subset from ../xian/osm/rn-comp-xa-190101-didi/edges.shp...
+Filtering SHP: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 10760/10760 [00:03<00:00, 3449.42it/s]
+[INFO] Successfully saved 8839 features to ../xian/osm/rn-comp-xa-190101-seg5/edges.shp.
+```
+
+## filtered_mm
+```shell
+python -m tptk.common.hhy_extract_active_shp \
+    --path_dir ../xian/filtered_mm_path \
+    --in_shp ../xian/osm/rn-comp-xa-190101-didi/edges.shp \
+    --out_shp ../xian/osm/rn-comp-xa-190101-filter/edges.shp
+
+(SAM) hanhaoyu@debian:~/sam_road/utils$ python -m tptk.common.hhy_extract_active_shp     --path_dir ../xian/filtered_mm_path     --in_shp ../xian/osm/rn-comp-xa-190101-didi/edges.shp     --out_shp ../xian/osm/rn-comp-xa-190101-filter/edges.shp
+[INFO] Scanning ../xian/filtered_mm_path for active edge IDs...
+Parsing Paths: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1427/1427 [02:27<00:00,  9.67it/s]
+[INFO] Found 8880 unique active eids.
+[INFO] Created output directory: ../xian/osm/rn-comp-xa-190101-filter
+[INFO] Extracting subset from ../xian/osm/rn-comp-xa-190101-didi/edges.shp...
+Filtering SHP: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 10760/10760 [00:03<00:00, 3564.19it/s]
+[INFO] Successfully saved 8880 features to ../xian/osm/rn-comp-xa-190101-filter/edges.shp.
+```
