@@ -10,6 +10,7 @@ import pickle
 import os
 import addict
 import json
+import random # [MODIFICATION]: 引入 random 用于 Modality Dropout
 
 
 
@@ -51,6 +52,23 @@ def spacenet_data_partition():
     val_list = data_list['validation']
     test_list = data_list['test']
     return train_list, val_list, test_list
+
+
+# ==========================================
+# [MODIFICATION 1]: 新增 xian 数据集的划分函数
+def didi_data_partition():
+    # dataset partition
+    with open('./xian/2019_400/data_split.json','r') as jf:
+        data_list = json.load(jf)
+        # data_list = data_list['test'] + data_list['validation'] + data_list['train']
+    # train_list = [tile_index for _, tile_index in data_list['train']]
+    # val_list = [tile_index for _, tile_index in data_list['validation']]
+    # test_list = [tile_index for _, tile_index in data_list['test']]
+    train_list = data_list['train']
+    val_list = data_list['validation']
+    test_list = data_list['test']
+    return train_list, val_list, test_list
+# ==========================================
 
 
 def get_patch_info_one_img(image_index, image_size, sample_margin, patch_size, patches_per_edge):
@@ -307,7 +325,8 @@ class SatMapDataset(Dataset):
     def __init__(self, config, is_train, dev_run=False):
         self.config = config
         
-        assert self.config.DATASET in {'cityscale', 'spacenet'}
+        # [MODIFICATION 2]: 支持 didi 数据集
+        assert self.config.DATASET in {'cityscale', 'spacenet', 'didi'}
         if self.config.DATASET == 'cityscale':
             self.IMAGE_SIZE = 2048
             # TODO: SAMPLE_MARGIN here is for training, the one in config is for inference
@@ -339,6 +358,28 @@ class SatMapDataset(Dataset):
             # takes [N, 2] points
             coord_transform = lambda v : np.stack([v[:, 1], 400 - v[:, 0]], axis=1)
 
+        # ==========================================
+        # [MODIFICATION 3]: xian 数据集配置，尺寸应该是 400
+        elif self.config.DATASET == 'xian':
+            self.IMAGE_SIZE = 400
+            self.SAMPLE_MARGIN = 0 # 类似 spacenet
+            
+            # 假设你的 xian 放在根目录或者 xian 目录下，这里做对应修改
+            # 你提到的文件名是 region_0_sat.png 等
+            rgb_pattern = './xian/2019_400/xian_2019_400/region_{}_sat.png'
+            active_mask_pattern = './xian/2019_400/xian_2019_400/region_{}_active.png'
+            
+            # 注意：SAM-Road 需要从 gt_graph 或者 gt.png 生成 keypoint 和 road mask
+            # 需要先运行 SAM-Road 提供的预处理脚本生成 processed/ 目录
+            keypoint_mask_pattern = './xian/2019_400/processed/keypoint_mask_{}.png'
+            road_mask_pattern = './xian/2019_400/processed/road_mask_{}.png'
+            
+            gt_graph_pattern = './xian/2019_400/region_{}_refine_gt_graph.p'
+            
+            train, val, test = didi_data_partition()
+            coord_transform = lambda v : v[:, ::-1] # 假设和 cityscale 一样是 (r, c)
+        # ==========================================
+
         self.is_train = is_train
 
         train_split = train + val
@@ -351,6 +392,8 @@ class SatMapDataset(Dataset):
         self.rgbs, self.keypoint_masks, self.road_masks = [], [], []
         # For graph label generation.
         self.graph_label_generators = []
+        # [MODIFICATION 4]: 新增存储 active mask 的列表
+        self.active_masks = []
 
         ##### FAST DEBUG
         if dev_run:
@@ -374,6 +417,15 @@ class SatMapDataset(Dataset):
             self.rgbs.append(read_rgb_img(rgb_path))
             self.road_masks.append(cv2.imread(road_mask_path, cv2.IMREAD_GRAYSCALE))
             self.keypoint_masks.append(cv2.imread(keypoint_mask_path, cv2.IMREAD_GRAYSCALE))
+
+            # [MODIFICATION 5]: 读取 active mask (仅限于 didi 数据集)
+            if self.config.DATASET == 'didi':
+                active_mask_path = active_mask_pattern.format(tile_idx)
+                # 读成单通道灰度图
+                self.active_masks.append(cv2.imread(active_mask_path, cv2.IMREAD_GRAYSCALE))
+            else:
+                self.active_masks.append(None) # 占位符，保持索引一致
+
             graph_label_generator = GraphLabelGenerator(config, gt_graph_adj, coord_transform)
             self.graph_label_generators.append(graph_label_generator)
             
@@ -396,6 +448,9 @@ class SatMapDataset(Dataset):
                 return max(1, int(self.IMAGE_SIZE / self.config.PATCH_SIZE)) ** 2 * 2500
             elif self.config.DATASET == 'spacenet':
                 return 84667
+            # [MODIFICATION 6]: 设定 xian 数据集的虚拟 Epoch 大小
+            elif self.config.DATASET == 'didi':
+                return 573 * 200
         else:
             return len(self.eval_patches)
 
@@ -415,6 +470,12 @@ class SatMapDataset(Dataset):
         keypoint_mask_patch = self.keypoint_masks[img_idx][begin_y:end_y, begin_x:end_x]
         road_mask_patch = self.road_masks[img_idx][begin_y:end_y, begin_x:end_x]
 
+        # [MODIFICATION 7]: 截取 active mask 补丁
+        if self.config.DATASET == 'didi':
+            active_mask_patch = self.active_masks[img_idx][begin_y:end_y, begin_x:end_x]
+        else:
+            active_mask_patch = None
+
         # Augmentation
         rot_index = 0
         if self.is_train:
@@ -423,6 +484,10 @@ class SatMapDataset(Dataset):
             rgb_patch = np.rot90(rgb_patch, rot_index, [0,1]).copy()
             keypoint_mask_patch = np.rot90(keypoint_mask_patch, rot_index, [0, 1]).copy()
             road_mask_patch = np.rot90(road_mask_patch, rot_index, [0, 1]).copy()
+
+            # [MODIFICATION 8]: 同步旋转 active mask
+            if self.config.DATASET == 'didi':
+                active_mask_patch = np.rot90(active_mask_patch, rot_index, [0, 1]).copy()
         
         # Sample graph labels from patch
         patch = ((begin_x, begin_y), (end_x, end_y))
@@ -431,10 +496,33 @@ class SatMapDataset(Dataset):
         
         pairs, connected, valid = zip(*topo_samples)
         
+        # ==========================================
+        # [MODIFICATION 9]: 模态随机丢弃 (Modality Dropout) 
+        # 将 RGB 与 Active Mask 拼接成 4 通道张量
+        if self.config.DATASET == 'didi':
+            # 1. 训练阶段: 50% 概率将先验置零
+            if self.is_train and random.random() < 0.5:
+                active_mask_patch = np.zeros_like(active_mask_patch)
+            # 2. 验证/测试阶段: 强制置零 (模拟当前 Generate 任务)
+            elif not self.is_train:
+                active_mask_patch = np.zeros_like(active_mask_patch)
+            
+            # 3. 归一化并扩展维度 (H, W) -> (H, W, 1)
+            active_mask_patch = (active_mask_patch.astype(np.float32) / 255.0)
+            active_mask_patch = np.expand_dims(active_mask_patch, axis=-1)
+            
+            # 4. 与 rgb_patch (H, W, 3) 拼接 -> (H, W, 4)
+            # 注意: rgb_patch 此刻依然是 0-255 的 numpy 数组
+            input_tensor = np.concatenate([rgb_patch, active_mask_patch], axis=-1)
+        else:
+            # 保持向下兼容: spacenet 和 cityscale 仍然输出 3 通道
+            input_tensor = rgb_patch
+        # ==========================================
+
         # rgb: [H, W, 3] 0-255
         # masks: [H, W] 0-1
         return {
-            'rgb': torch.tensor(rgb_patch, dtype=torch.float32),
+            'rgb': torch.tensor(input_tensor, dtype=torch.float32), # 现已成为 3 / 4 通道 (如果使用 didi)
             'keypoint_mask': torch.tensor(keypoint_mask_patch, dtype=torch.float32) / 255.0,
             'road_mask': torch.tensor(road_mask_patch, dtype=torch.float32) / 255.0,
             

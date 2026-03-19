@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 
 from utils import load_config
 from dataset import SatMapDataset, graph_collate_fn
-from model import SAMRoad
+from model_copy import SAMRoad
 
 import wandb
 
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     )
 
     checkpoint_callback = ModelCheckpoint(
-        dirpath="checkpoints/samroad_cityscale/",          # 自定义保存目录
+        dirpath="checkpoints/samroad_xian_2019_400/",          # 自定义保存目录
         every_n_epochs=1, 
         save_top_k=-1
     )

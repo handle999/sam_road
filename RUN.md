@@ -100,4 +100,7 @@ python train.py --config=config/toponet_vitb_256_spacenet.yaml
 CUDA_VISIBLE_DEVICES=7 python train.py --config=config/toponet_vitb_512_cityscale.yaml 2>&1 | tee ./train_logs/sam_road_official_cityscale.txt
 
 CUDA_VISIBLE_DEVICES=6 python train.py --config=config/toponet_vitb_256_spacenet.yaml 2>&1 | tee ./train_logs/sam_road_official_spacenet.txt
+
+# xian dataset
+CUDA_VISIBLE_DEVICES=7 python train.py --config=config/toponet_vitb_256_xian_cityscale.yaml 2>&1 | tee ./train_logs/sam_road_xian_cityscale.txt
 ```
