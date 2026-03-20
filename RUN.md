@@ -13,6 +13,10 @@ pip install torchmetrics==0.11.4
 # graph_extraction.py
 pip3 install tcod
 pip install igraph
+pip install scikit-image
+# inferencer.py
+pip install imageio
+
 ```
 
 下面会有fastapi和pydantic冲突，然后涉及到gradio的问题
@@ -54,38 +58,31 @@ python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint
 python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/sam_road/epoch=19-step=26460.ckpt --output_dir=sam_road_official_ep20
 python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/sam_road/epoch=24-step=33075.ckpt --output_dir=sam_road_official_ep25
 
-python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/sam_road_contra_lambda001/epoch=19-step=52920.ckpt --output_dir=sam_road_contra_lambda001_ep20
-python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/sam_road_contra_lambda001/epoch=24-step=66150.ckpt --output_dir=sam_road_contra_lambda001_ep25
-python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/sam_road_contra_lambda001/epoch=29-step=79380.ckpt --output_dir=sam_road_contra_lambda001_ep30
-```
-
-
-```shell
-python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/sam_road_graph/epoch=9-step=13230.ckpt
-```
-
-```shell
-python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/sam_road_graph/epoch=29-step=39690.ckpt
-```
-
-```shell
-python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/sam_road_contra/epoch=2-step=7938.ckpt
-python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/sam_road_contra/epoch=5-step=15876.ckpt
-python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/sam_road_contra/epoch=9-step=26460.ckpt
-```
-
-```shell
-python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/sam_road_contra_lambda01/epoch=9-step=26460.ckpt
-```
-
-```shell
-python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/sam_road_contra_lambda001/epoch=9-step=26460.ckpt
 ```
 
 ```shell
 python inferencer.py --config=config/toponet_vitb_256_xian_space.yaml --checkpoint=./checkpoints/spacenet_vitb_256_e10.ckpt --output_dir=xian_sam_road_official_ep10_202512292249
 
 python inferencer.py --config=config/toponet_vitb_512_xian_cityscale.yaml --checkpoint=./checkpoints/cityscale_vitb_512_e10.ckpt --output_dir=xian_sam_road_official_cityscale_ep10_202512292303
+
+# spacenet
+## official
+python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_official_spacenet/epoch=9-step=13230.ckpt --output_dir=spacenet_official_ep10
+
+## 4 channel train
+python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_4c_spacenet/epoch=9-step=13230.ckpt --output_dir=spacenet_4c_ep10
+
+## 4 channel updata
+## change `inferencer_copy.py` line 290
+python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_4c_spacenet/epoch=9-step=13230.ckpt --output_dir=spacenet_4c_ep10_update
+
+python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_4c_update_spacenet/epoch=0-step=1323.ckpt --output_dir=spacenet_4c_update_train_ep1
+
+python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_4c_update_spacenet/epoch=9-step=13230.ckpt --output_dir=spacenet_4c_update_train_ep10
+
+# didi
+## xian-2019-400
+python inferencer_copy.py --config=config/toponet_vitb_256_xian_cityscale.yaml --checkpoint=./checkpoints/samroad_xian_2019_400/epoch=0-step=1794.ckpt --output_dir=didi_xian_ep0
 ```
 
 # Train
@@ -93,9 +90,14 @@ python inferencer.py --config=config/toponet_vitb_512_xian_cityscale.yaml --chec
 ```shell
 # City-scale dataset:  
 python train.py --config=config/toponet_vitb_512_cityscale.yaml
+python train.py --config=config/toponet_vitb_512_cityscale.yaml  --ckpt_path=./checkpoints/samroad_city 2>&1 | tee ./train_logs/sam_road_official_cityscale.txt
+python -u train.py --config=config/toponet_vitb_512_cityscale.yaml --ckpt_path=./checkpoints/samroad_city
 
 # SpaceNet dataset:  
 python train.py --config=config/toponet_vitb_256_spacenet.yaml
+python train.py --config=config/toponet_vitb_256_spacenet.yaml --ckpt_path=./checkpoints/samroad_spacenet 2>&1 | tee ./train_logs/sam_road_spacenet.txt
+python -u train.py --config=config/toponet_vitb_256_spacenet.yaml --ckpt_path=./checkpoints/samroad_spacenet
+python train.py --config=config/toponet_vitb_256_spacenet.yaml --ckpt_path=./checkpoints/samroad_4c_update_spacenet 2>&1 | tee ./train_logs/sam_road_spacenet_4c_update.txt
 
 CUDA_VISIBLE_DEVICES=7 python train.py --config=config/toponet_vitb_512_cityscale.yaml 2>&1 | tee ./train_logs/sam_road_official_cityscale.txt
 
@@ -103,4 +105,16 @@ CUDA_VISIBLE_DEVICES=6 python train.py --config=config/toponet_vitb_256_spacenet
 
 # xian dataset
 CUDA_VISIBLE_DEVICES=7 python train.py --config=config/toponet_vitb_256_xian_cityscale.yaml 2>&1 | tee ./train_logs/sam_road_xian_cityscale.txt
+```
+
+
+# sample pickle
+
+```shell
+python generate_partial_prior.py \
+    --dataset spacenet \
+    --input_dir ./spacenet/RGB_1.0_meter \
+    --output_dir ./spacenet/sample_prior \
+    --keep_ratio 0.5 \
+    --thickness 3
 ```
