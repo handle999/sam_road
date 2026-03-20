@@ -80,6 +80,12 @@ python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --check
 
 python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_4c_update_spacenet/epoch=9-step=13230.ckpt --output_dir=spacenet_4c_update_train_ep10
 
+### extract: total 0 gt
+python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_4c_update_spacenet/epoch=9-step=13230.ckpt --output_dir=spacenet_4c_update_train_ep10_extract --task=extraction
+
+# update: 50% gt
+python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_4c_update_spacenet/epoch=9-step=13230.ckpt --output_dir=spacenet_4c_update_train_ep10_update --task=update
+
 # didi
 ## xian-2019-400
 python inferencer_copy.py --config=config/toponet_vitb_256_xian_cityscale.yaml --checkpoint=./checkpoints/samroad_xian_2019_400/epoch=0-step=1794.ckpt --output_dir=didi_xian_ep0
@@ -111,10 +117,5 @@ CUDA_VISIBLE_DEVICES=7 python train.py --config=config/toponet_vitb_256_xian_cit
 # sample pickle
 
 ```shell
-python generate_partial_prior.py \
-    --dataset spacenet \
-    --input_dir ./spacenet/RGB_1.0_meter \
-    --output_dir ./spacenet/sample_prior \
-    --keep_ratio 0.5 \
-    --thickness 3
+python generate_partial_prior.py --dataset spacenet --input_dir ./spacenet/RGB_1.0_meter --output_dir ./spacenet/sample_prior --keep_ratio 0.5 --thickness 3
 ```

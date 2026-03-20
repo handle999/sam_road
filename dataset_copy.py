@@ -330,6 +330,7 @@ def graph_collate_fn(batch):
 class SatMapDataset(Dataset):
     def __init__(self, config, is_train, dev_run=False):
         self.config = config
+        self.is_train = is_train
         
         # [MODIFICATION 2]: 支持 didi 数据集
         assert self.config.DATASET in {'cityscale', 'spacenet', 'didi'}
@@ -345,7 +346,11 @@ class SatMapDataset(Dataset):
 
             # ==========================================
             # [UNIFIED 4-CHANNEL]: 指定 cityscale 的 GT 作为 prior 输入
-            active_mask_pattern = './cityscale/20cities/region_{}_gt.png'
+            if self.is_train:
+                active_mask_pattern = './cityscale/20cities/region_{}_gt.png'
+            else:
+                # 验证集使用生成的残缺先验，确保指标稳定
+                active_mask_pattern = './cityscale/sample_prior/region_{}_refine_gt_graph_partial.png'
             # ==========================================
             
             train, val, test = cityscale_data_partition()
@@ -366,7 +371,10 @@ class SatMapDataset(Dataset):
             # ==========================================
             # [UNIFIED 4-CHANNEL]: 指定 spacenet 的 GT 作为 prior 输入
             # 注意: 这里的命名要和实际的 _gt.png 对齐
-            active_mask_pattern = './spacenet/RGB_1.0_meter/{}__gt.png'
+            if self.is_train:
+                active_mask_pattern = './spacenet/RGB_1.0_meter/{}__gt.png'
+            else:
+                active_mask_pattern = './spacenet/sample_prior/{}__gt_graph_partial.png'
             # ==========================================
             
             train, val, test = spacenet_data_partition()
@@ -384,7 +392,12 @@ class SatMapDataset(Dataset):
             # 假设你的 xian 放在根目录或者 xian 目录下，这里做对应修改
             # 你提到的文件名是 region_0_sat.png 等
             rgb_pattern = './xian/2019_400/xian_2019_400/region_{}_sat.png'
-            active_mask_pattern = './xian/2019_400/xian_2019_400/region_{}_active.png'
+
+            # 注意区分 train 和 test 的 active mask 路径和命名
+            if self.is_train:
+                active_mask_pattern = './xian/2019_400/xian_2019_400/region_{}_active.png' # 或 _gt.png
+            else:
+                active_mask_pattern = './xian/2019_400/sample_prior/region_{}_refine_gt_graph_partial.png'
             
             # 注意：SAM-Road 需要从 gt_graph 或者 gt.png 生成 keypoint 和 road mask
             # 需要先运行 SAM-Road 提供的预处理脚本生成 processed/ 目录
@@ -396,8 +409,6 @@ class SatMapDataset(Dataset):
             train, val, test = didi_data_partition()
             coord_transform = lambda v : v[:, ::-1] # 假设和 cityscale 一样是 (r, c)
         # ==========================================
-
-        self.is_train = is_train
 
         train_split = train + val
         test_split = test
@@ -441,8 +452,13 @@ class SatMapDataset(Dataset):
             active_img = cv2.imread(active_mask_path, cv2.IMREAD_GRAYSCALE)
             if active_img is None:
                 # 防御性回退：如果没找到 gt.png，就借用 road_mask.png 作为先验
-                print(f"[WARN] Cannot find {active_mask_path}. Falling back to road_mask.")
-                active_img = cv2.imread(road_mask_path, cv2.IMREAD_GRAYSCALE)
+                if self.is_train:
+                    print(f"[WARN] Cannot find GT {active_mask_path}. Falling back to road_mask.")
+                    active_img = cv2.imread(road_mask_path, cv2.IMREAD_GRAYSCALE)
+                # infer截断，使用全黑先验
+                else:
+                    print(f"[WARN] Cannot find Partial Prior {active_mask_path}. Using empty prior for Validation.")
+                    active_img = np.zeros((self.IMAGE_SIZE, self.IMAGE_SIZE), dtype=np.uint8)
             self.active_masks.append(active_img)
             # ==========================================
 

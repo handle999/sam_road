@@ -15,6 +15,7 @@ for output_dir in "${output_dirs[@]}"; do
     # Construct the full path to the output directory
     full_path="$base_dir/$output_dir"
     
+    echo "========= Evaluating $output_dir ========="
     # Run the apls.bash script with the full path to the output directory
     bash apls.bash "$full_path"
     

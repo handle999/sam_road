@@ -21,6 +21,7 @@ from collections import defaultdict
 import time
 
 from argparse import ArgumentParser
+from tqdm import tqdm       # infer bar
 
 
 parser = ArgumentParser()
@@ -34,6 +35,9 @@ parser.add_argument(
     "--output_dir", default=None, help="Name of the output dir, if not specified will use timestamp"
 )
 parser.add_argument("--device", default="cuda", help="device to use for training")
+# 任务界定，分为“提取”和“更新”：
+parser.add_argument("--task", type=str, default="extraction", choices=["extraction", "update"], 
+                    help="extraction: 0 prior (全黑) | update: partial prior (读 sample_prior)")
 args = parser.parse_args()
 
 
@@ -121,7 +125,7 @@ def infer_one_img(net, img, config):
     
     ## Extract sample points from masks
     graph_points = graph_extraction.extract_graph_points(fused_keypoint_mask, fused_road_mask, config)
-    print(graph_points.shape[0])    # hhy add 0707
+    # print(graph_points.shape[0])    # hhy add 0707
     if graph_points.shape[0] == 0:
         return graph_points, np.zeros((0, 2), dtype=np.int32), fused_keypoint_mask, fused_road_mask
 
@@ -227,7 +231,7 @@ def infer_one_img(net, img, config):
     pred_edges = []
     for edge, score_sum in edge_scores.items():
         score = score_sum / edge_counts[edge] 
-        print(edge, score)  # hhy add 0707
+        # print(edge, score)  # hhy add 0707
         if score > config.TOPO_THRESHOLD:
             pred_edges.append(edge)
     pred_edges = np.array(pred_edges).reshape(-1, 2)
@@ -282,43 +286,56 @@ if __name__ == "__main__":
     
     total_inference_seconds = 0.0
 
-    for img_id in test_img_indices:
-        print(f'Processing {img_id}')
+    # ==========================================
+    # [=== 修改：引入 tqdm，并用 pbar.set_description 替代 print ===]
+    # ==========================================
+    pbar = tqdm(test_img_indices, desc="Inference Progress")
+    for img_id in pbar:
+        # 动态更新进度条前面的文字，这样不会像普通 print 那样刷屏
+        pbar.set_description(f'Processing {img_id}')
         # [H, W, C] RGB
         img = read_rgb_img(rgb_pattern.format(img_id))
 
         # ==========================================
-        # [修改 1]: 拆除 if 限制！所有数据集统一补齐全 0 的第 4 通道
+        # [=== 修改 1：根据 --task 参数决定第 4 通道的生成方式 ===]
         # 因为底层模型已经是 4 通道输入，闭卷考试时一律给空先验
         # empty_prior = np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)
         # img_4c = np.concatenate([img, empty_prior], axis=-1)
         
-        # [修改：半开卷测试] 从 sample_prior 文件夹读取残缺的 PNG
-        if config.DATASET == 'cityscale':
-            partial_prior_path = f'./cityscale/sample_prior/region_{img_id}_refine_gt_graph_partial.png'
-        elif config.DATASET == 'spacenet':
-            partial_prior_path = f'./spacenet/sample_prior/{img_id}__gt_graph_partial.png'
-        elif config.DATASET == 'didi':
-            partial_prior_path = f'./xian/2019_400/sample_prior/region_{img_id}_refine_gt_graph_partial.png'
-        
-        # 尝试读取，如果不存在（比如还没跑生成脚本），则给个警告并退回全黑
-        if os.path.exists(partial_prior_path):
-            partial_img = cv2.imread(partial_prior_path, cv2.IMREAD_GRAYSCALE)
-            partial_prior = (partial_img.astype(np.float32) / 255.0)
-            partial_prior = np.expand_dims(partial_prior, axis=-1)
+        if args.task == "extraction":
+            # 任务：盲提取 -> 使用全黑的先验
+            prior = np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)
+        elif args.task == "update":
+            # 任务：路网更新 -> 读取生成的残缺先验 (partial prior)
+            if config.DATASET == 'cityscale':
+                partial_prior_path = f'./cityscale/sample_prior/region_{img_id}_refine_gt_graph_partial.png'
+            elif config.DATASET == 'spacenet':
+                partial_prior_path = f'./spacenet/sample_prior/{img_id}__gt_graph_partial.png'
+            elif config.DATASET == 'didi':
+                partial_prior_path = f'./xian/2019_400/sample_prior/region_{img_id}_refine_gt_graph_partial.png'
+            else:
+                raise ValueError(f"Unknown dataset type: {config.DATASET}")
+            
+            # 尝试读取
+            if os.path.exists(partial_prior_path):
+                partial_img = cv2.imread(partial_prior_path, cv2.IMREAD_GRAYSCALE)
+                prior = (partial_img.astype(np.float32) / 255.0)
+                prior = np.expand_dims(prior, axis=-1)
+            else:
+                tqdm.write(f"[WARN] Partial prior not found: {partial_prior_path}. Falling back to empty prior.")
+                prior = np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)
         else:
-            print(f"[WARN] Partial prior not found: {partial_prior_path}. Using empty prior instead.")
-            partial_prior = np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)
+            raise ValueError(f"Unknown task: {args.task}")
         # ==========================================
 
         # 拼成 4 通道 [H, W, 4]
-        img_4c = np.concatenate([img, partial_prior], axis=-1)
+        img_4c = np.concatenate([img, prior], axis=-1)
         # ==========================================
 
         start_seconds = time.time()
         # coords in (r, c)
         # ==========================================
-        # 2. 注意这里：送入网络推断的是 4 通道的 img_4c
+        # [=== 修改 2：送入网络的必须是 4 通道变量 img_4c ===]
         pred_nodes, pred_edges, itsc_mask, road_mask = infer_one_img(net, img_4c, config)
         # ==========================================
         end_seconds = time.time()
@@ -337,7 +354,7 @@ if __name__ == "__main__":
 
         # RGB already
         # ==========================================
-        # [修改 2]: 画图时必须使用原来的 3 通道 img！
+        # [=== 修改 3：保留原版 3 通道 img 用于 OpenCV 绘图 ===]
         # 如果用 4 通道的 img_4c，OpenCV 的 cv2.imwrite 和 triage 画图会报错
         viz_img = np.copy(img)
         # ==========================================
@@ -388,7 +405,7 @@ if __name__ == "__main__":
         with open(graph_save_path, 'wb') as file:
             pickle.dump(large_map_sat2graph_format, file)
         
-        print(f'Done for {img_id}.')
+        # print(f'Done for {img_id}.')
     
     # log inference time
     time_txt = f'Inference completed for {args.config} in {total_inference_seconds} seconds.'

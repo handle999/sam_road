@@ -232,8 +232,8 @@ def TOPOGenerateStartingPoints(OSMMap, check = True, density = 0.00050, region =
 
 
 
-    print(len(result))
-    print("Skipped tunnels ", tunnel_skip_num)
+    # print(len(result))                              # hhy 2026/03/21, 统计了生成的起始点数量，生成的起始点数量会影响后续评测的结果，过多的起始点会增加评测时间，过少的起始点可能会导致评测结果不稳定，所以这里统计了生成的起始点数量
+    # print("Skipped tunnels ", tunnel_skip_num)      # hhy 2026/03/21, 因为隧道内的道路在卫星图上是不可见的，所以作者不将隧道内的点作为评测的种子点，这里统计了被跳过的隧道点数量
     return result
 
 

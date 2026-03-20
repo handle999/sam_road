@@ -1,5 +1,3 @@
-# source directory
-dir=$1
-
-python ./topo/main.py -savedir $dir
-python topo.py -savedir $dir
+#!/bin/bash
+# 接收第一个参数并传给 python 脚本
+python topo_parallel.py -savedir "$1"

@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 rem === 设置输出目录列表 ===
-set output_dirs=sam_road_official_ep20
+set output_dirs=spacenet_4c_update_train_ep10_update
 
 rem === 设置基准路径 ===
 set base_dir=save
