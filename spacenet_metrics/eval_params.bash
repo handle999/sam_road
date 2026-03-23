@@ -22,14 +22,14 @@ for full_path in ../save/exp_*; do
         if [ ! -f "$full_path/results/apls.json" ]; then
             echo "    -> [RUNNING] Calculating APLS..."
             # Call the shell wrapper script in the current directory
-            bash ./apls.sh "$target_dir"
+            bash ./apls.bash "$target_dir"
         else
             echo "    -> [SKIPPED] APLS already exists."
         fi
 
         if [ ! -f "$full_path/results/topo.json" ]; then
             echo "    -> [RUNNING] Calculating TOPO..."
-            bash ./topo.sh "$target_dir"
+            bash ./topo.bash "$target_dir"
         else
             echo "    -> [SKIPPED] TOPO already exists."
         fi

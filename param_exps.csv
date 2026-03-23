@@ -4,7 +4,11 @@ exp_base_upd,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.5,0.341,0
 exp_base_full,full,config/toponet_vitb_256_spacenet.yaml,spacenet,2,1,0.341,0.195,0.705,16,8,64,16
 exp_edge_02,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.5,0.341,0.195,0.705,16,8,64,16
 exp_edge_04,update,config/toponet_vitb_256_spacenet.yaml,spacenet,4,0.5,0.341,0.195,0.705,16,8,64,16
+exp_edge_06,update,config/toponet_vitb_256_spacenet.yaml,spacenet,6,0.5,0.341,0.195,0.705,16,8,64,16
 exp_edge_08,update,config/toponet_vitb_256_spacenet.yaml,spacenet,8,0.5,0.341,0.195,0.705,16,8,64,16
+exp_edge_10,update,config/toponet_vitb_256_spacenet.yaml,spacenet,10,0.5,0.341,0.195,0.705,16,8,64,16
+exp_edge_12,update,config/toponet_vitb_256_spacenet.yaml,spacenet,12,0.5,0.341,0.195,0.705,16,8,64,16
+exp_edge_14,update,config/toponet_vitb_256_spacenet.yaml,spacenet,14,0.5,0.341,0.195,0.705,16,8,64,16
 exp_edge_16,update,config/toponet_vitb_256_spacenet.yaml,spacenet,16,0.5,0.341,0.195,0.705,16,8,64,16
 exp_ratio_0.25,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.25,0.341,0.195,0.705,16,8,64,16
 exp_ratio_0.75,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.75,0.341,0.195,0.705,16,8,64,16

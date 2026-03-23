@@ -13,10 +13,13 @@ pip install torchmetrics==0.11.4
 # graph_extraction.py
 pip3 install tcod
 pip install igraph
-pip install scikit-image
+pip install scikit-image==0.24.0
 # inferencer.py
 pip install imageio
-
+# graph
+pip install networkx==2.8.8
+# metric/topo
+pip install svgwrite
 ```
 
 下面会有fastapi和pydantic冲突，然后涉及到gradio的问题
