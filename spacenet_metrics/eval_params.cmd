@@ -1,29 +1,31 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: Resolve the absolute path of the save directory
-pushd ..\save
-set "SAVE_DIR=%CD%"
-popd
+set "base_dir=save"
 
 echo =================================================
 echo   Starting Evaluation Pipeline...
 echo =================================================
 
-for /d %%D in ("%SAVE_DIR%\exp_*") do (
-    echo.
-    echo ========= Evaluating %%~nxD =========
+rem Iterate through folders inside ../save/
+for /f "delims=" %%D in ('dir /b /ad "..\save\exp_*" 2^>nul') do (
+    rem Construct the clean relative path that apls.py expects
+    set "target_dir=!base_dir!/%%D"
+    set "full_path=..\!base_dir!\%%D"
     
-    if not exist "%%D\apls_result.json" (
+    echo.
+    echo ========= Evaluating %%D =========
+    
+    if not exist "!full_path!\results\apls.json" (
         echo     -^> [RUNNING] Calculating APLS...
-        call apls.cmd "%%D"
+        call "%~dp0apls.cmd" "!target_dir!"
     ) else (
         echo     -^> [SKIPPED] APLS already exists.
     )
 
-    if not exist "%%D\topo_result.json" (
+    if not exist "!full_path!\results\topo.json" (
         echo     -^> [RUNNING] Calculating TOPO...
-        call topo.cmd "%%D"
+        call "%~dp0topo.cmd" "!target_dir!"
     ) else (
         echo     -^> [SKIPPED] TOPO already exists.
     )
@@ -32,10 +34,7 @@ for /d %%D in ("%SAVE_DIR%\exp_*") do (
 echo.
 echo =================================================
 echo   All evaluations finished!
-echo   Triggering Result Aggregator...
+echo   Please run 'python params_aggregate_rsts.py' in the root directory.
 echo =================================================
-
-:: Execute the aggregator script located in the parent directory
-python ..\params_aggregate_rsts.py
 
 endlocal

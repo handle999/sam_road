@@ -41,30 +41,32 @@ def aggregate_results():
         # ==========================================
         # 提取 APLS 指标
         # ==========================================
-        apls_file = os.path.join(exp_dir, 'apls_result.json')
+        apls_file = os.path.join(exp_dir, 'results/apls.json')
         if os.path.exists(apls_file):
             try:
                 with open(apls_file, 'r') as jf:
                     apls_data = json.load(jf)
                     # 【注意】：请根据 apls.py 实际生成的 JSON 键名修改这里
-                    # 假设 JSON 长这样: {"apls_score": 0.7637}
-                    row['APLS'] = apls_data.get('apls_score', 'N/A') 
+                    # 假设 JSON 长这样: {"final_APLS": 0.7637}
+                    row['APLS'] = apls_data.get('final_APLS', 'N/A') 
             except Exception as e:
                 print(f"[WARN] Failed to read APLS for {exp_id}: {e}")
 
         # ==========================================
         # 提取 TOPO 指标 (Pre, Rec, F1)
         # ==========================================
-        topo_file = os.path.join(exp_dir, 'topo_result.json')
+        topo_file = os.path.join(exp_dir, 'results/topo.json')
         if os.path.exists(topo_file):
             try:
                 with open(topo_file, 'r') as jf:
                     topo_data = json.load(jf)
-                    # 【注意】：请根据 topo.py 实际生成的 JSON 键名修改这里
-                    # 假设 JSON 长这样: {"precision": 0.97, "recall": 0.68, "f1": 0.80}
-                    row['TOPO_Pre'] = topo_data.get('precision', 'N/A')
-                    row['TOPO_Rec'] = topo_data.get('recall', 'N/A')
-                    row['TOPO_F1']  = topo_data.get('f1', 'N/A')
+                    mean_topo = topo_data.get('mean topo', [])
+
+                    if isinstance(mean_topo, list) and len(mean_topo) >= 3:
+                        # "mean topo" order: [F1, Precision, Recall]
+                        row['TOPO_F1']  = mean_topo[0]
+                        row['TOPO_Pre'] = mean_topo[1]
+                        row['TOPO_Rec'] = mean_topo[2]
             except Exception as e:
                 print(f"[WARN] Failed to read TOPO for {exp_id}: {e}")
 

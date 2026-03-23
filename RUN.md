@@ -149,6 +149,9 @@ eval_sam.cmd
 # multi (auto, csv)
 tmux new -s ablation_run
 python param_exps.py
+cd spacenet_metrics
+eval_params.cmd
+cd ..
 python params_aggregate_rsts.py
 ```
 

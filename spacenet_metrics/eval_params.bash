@@ -1,39 +1,35 @@
 #!/bin/bash
-# ==========================================================
-# SAM-Road Evaluation Pipeline
-# Location: Must be inside spacenet_metrics/ folder
-# ==========================================================
 
-SAVE_DIR="../save"
+base_dir="save"
 
 echo "================================================="
 echo "  Starting Evaluation Pipeline..."
 echo "================================================="
 
-for EXP_DIR in "$SAVE_DIR"/exp_*; do
-    if [ -d "$EXP_DIR" ]; then
-        EXP_ID=$(basename "$EXP_DIR")
+# Iterate through folders inside ../save/
+for full_path in ../save/exp_*; do
+    # Check if it's a valid directory
+    if [ -d "$full_path" ]; then
+        # Extract just the folder name (e.g., exp_base_ext)
+        exp_name=$(basename "$full_path")
+        
+        # Construct the clean relative path that apls.py expects
+        target_dir="$base_dir/$exp_name"
+        
         echo ""
-        echo ">>> Evaluating: $EXP_ID"
-
-        # ------------------------------------------------------
-        # [Metric 1]: APLS
-        # ------------------------------------------------------
-        APLS_OUT="$EXP_DIR/apls_result.json"
-        if [ ! -f "$APLS_OUT" ]; then
+        echo "========= Evaluating $exp_name ========="
+        
+        if [ ! -f "$full_path/results/apls.json" ]; then
             echo "    -> [RUNNING] Calculating APLS..."
-            python apls.py --dir "$EXP_DIR"
+            # Call the shell wrapper script in the current directory
+            bash ./apls.sh "$target_dir"
         else
             echo "    -> [SKIPPED] APLS already exists."
         fi
 
-        # ------------------------------------------------------
-        # [Metric 2]: TOPO
-        # ------------------------------------------------------
-        TOPO_OUT="$EXP_DIR/topo_result.json"
-        if [ ! -f "$TOPO_OUT" ]; then
+        if [ ! -f "$full_path/results/topo.json" ]; then
             echo "    -> [RUNNING] Calculating TOPO..."
-            python topo.py -savedir "$EXP_DIR"
+            bash ./topo.sh "$target_dir"
         else
             echo "    -> [SKIPPED] TOPO already exists."
         fi
@@ -43,8 +39,5 @@ done
 echo ""
 echo "================================================="
 echo "  All evaluations finished!"
-echo "  Triggering Result Aggregator..."
+echo "  Please run 'python params_aggregate_rsts.py' in the root directory."
 echo "================================================="
-
-# Call the aggregator script located in the parent folder
-python ../params_aggregate_rsts.py
