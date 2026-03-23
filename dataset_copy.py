@@ -350,7 +350,7 @@ class SatMapDataset(Dataset):
                 active_mask_pattern = './cityscale/20cities/region_{}_gt.png'
             else:
                 # 验证集使用生成的残缺先验，确保指标稳定
-                active_mask_pattern = './cityscale/sample_prior/region_{}_refine_gt_graph_partial.png'
+                active_mask_pattern = './cityscale/sample_0.5/region_{}_refine_gt_graph_partial.png'
             # ==========================================
             
             train, val, test = cityscale_data_partition()
@@ -374,7 +374,8 @@ class SatMapDataset(Dataset):
             if self.is_train:
                 active_mask_pattern = './spacenet/RGB_1.0_meter/{}__gt.png'
             else:
-                active_mask_pattern = './spacenet/sample_prior/{}__gt_graph_partial.png'
+                # TODO: sample percentage, use argument or config
+                active_mask_pattern = './spacenet/sample_0.5/{}__gt_graph_partial.png'
             # ==========================================
             
             train, val, test = spacenet_data_partition()
@@ -397,7 +398,7 @@ class SatMapDataset(Dataset):
             if self.is_train:
                 active_mask_pattern = './xian/2019_400/xian_2019_400/region_{}_active.png' # 或 _gt.png
             else:
-                active_mask_pattern = './xian/2019_400/sample_prior/region_{}_refine_gt_graph_partial.png'
+                active_mask_pattern = './xian/2019_400/sample_0.5/region_{}_refine_gt_graph_partial.png'
             
             # 注意：SAM-Road 需要从 gt_graph 或者 gt.png 生成 keypoint 和 road mask
             # 需要先运行 SAM-Road 提供的预处理脚本生成 processed/ 目录

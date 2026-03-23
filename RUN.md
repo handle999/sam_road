@@ -83,8 +83,17 @@ python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --check
 ### extract: total 0 gt
 python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_4c_update_spacenet/epoch=9-step=13230.ckpt --output_dir=spacenet_4c_update_train_ep10_extract --task=extraction
 
+# update: 25% gt
+python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_4c_update_spacenet/epoch=9-step=13230.ckpt --output_dir=spacenet_4c_update_train_ep10_update_25 --task=update
+
 # update: 50% gt
 python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_4c_update_spacenet/epoch=9-step=13230.ckpt --output_dir=spacenet_4c_update_train_ep10_update --task=update
+
+# update: 75% gt
+python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_4c_update_spacenet/epoch=9-step=13230.ckpt --output_dir=spacenet_4c_update_train_ep10_update_75 --task=update
+
+# full: 100% gt (extreme version: all gt input)
+python inferencer_copy.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=./checkpoints/samroad_4c_update_spacenet/epoch=9-step=13230.ckpt --output_dir=spacenet_4c_update_train_ep10_full --task=full
 
 # didi
 ## xian-2019-400
@@ -117,5 +126,29 @@ CUDA_VISIBLE_DEVICES=7 python train.py --config=config/toponet_vitb_256_xian_cit
 # sample pickle
 
 ```shell
-python generate_partial_prior.py --dataset spacenet --input_dir ./spacenet/RGB_1.0_meter --output_dir ./spacenet/sample_prior --keep_ratio 0.5 --thickness 3
+python generate_partial_prior.py --dataset spacenet --input_dir ./spacenet/RGB_1.0_meter --output_dir ./spacenet/sample_0.5 --keep_ratio 0.5 --thickness 3
+
+python generate_partial_prior.py --dataset spacenet --input_dir ./spacenet/RGB_1.0_meter --output_dir ./spacenet/sample_0.25 --keep_ratio 0.25 --thickness 3
+
+python generate_partial_prior.py --dataset spacenet --input_dir ./spacenet/RGB_1.0_meter --output_dir ./spacenet/sample_0.75 --keep_ratio 0.75 --thickness 3
 ```
+
+
+# new infer (single and auto-param)
+
+```shell
+# single
+python inferencer_copy.py --checkpoint ./checkpoints/samroad_4c_update_spacenet/epoch=9-step=13230.ckpt --config ./config/toponet_vitb_256_spacenet.yaml --task update --exp_id test_run_01 --edge 2 --ratio 0.5
+
+# single metric
+cd spacenet_metrics
+# change 'folder'
+eval_sam.cmd
+
+
+# multi (auto, csv)
+tmux new -s ablation_run
+python param_exps.py
+python params_aggregate_rsts.py
+```
+

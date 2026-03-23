@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 rem === 设置输出目录列表 ===
-set output_dirs=spacenet_4c_update_train_ep10_update
+set output_dirs=test_run_01
 
 rem === 设置基准路径 ===
 set base_dir=save
@@ -16,4 +16,3 @@ for %%D in (%output_dirs%) do (
 )
 
 endlocal
-            

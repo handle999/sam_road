@@ -1,0 +1,4 @@
+exp_id,task,config,dataset,edge,ratio,road_thresh,itsc_thresh,topo_thresh,road_nms,itsc_nms,nbr_radius,max_nbr_q,APLS,TOPO_Pre,TOPO_Rec,TOPO_F1
+exp_base_ext,extraction,config/toponet_vitb_256.yaml,spacenet,2,0,0.341,0.195,0.705,16,8,64,16,N/A,N/A,N/A,N/A
+exp_base_upd,update,config/toponet_vitb_256.yaml,spacenet,2,0.5,0.341,0.195,0.705,16,8,64,16,N/A,N/A,N/A,N/A
+exp_base_full,full,config/toponet_vitb_256.yaml,spacenet,2,1,0.341,0.195,0.705,16,8,64,16,N/A,N/A,N/A,N/A

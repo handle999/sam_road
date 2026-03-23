@@ -9,7 +9,6 @@ from dataset_copy import cityscale_data_partition, read_rgb_img, get_patch_info_
 from dataset_copy import spacenet_data_partition
 # from model import SAMRoad   # 如果使用其他模型，请取消相应的注释
 from model_copy import SAMRoad
-# from model_contra_graphtransformer import SAMRoad
 import graph_extraction
 import graph_utils
 import triage
@@ -35,9 +34,25 @@ parser.add_argument(
     "--output_dir", default=None, help="Name of the output dir, if not specified will use timestamp"
 )
 parser.add_argument("--device", default="cuda", help="device to use for training")
+
 # 任务界定，分为“提取”和“更新”：
-parser.add_argument("--task", type=str, default="extraction", choices=["extraction", "update"], 
-                    help="extraction: 0 prior (全黑) | update: partial prior (读 sample_prior)")
+parser.add_argument("--task", type=str, default="extraction", choices=["extraction", "update", "full"], 
+                    help="extraction: 0 prior (全黑) | update: partial prior (读 sample) | full: full prior (读 gt 图，极端情况)")
+
+# [=== 核心修改：新增用于全自动消融实验的参数覆写接口 ===]
+parser.add_argument("--exp_id", type=str, default=None, help="Unique ID for this experiment run")
+parser.add_argument("--dataset", type=str, default=None, help="Override config.DATASET")
+parser.add_argument("--edge", type=int, default=None, help="Override config.INFER_PATCHES_PER_EDGE")
+parser.add_argument("--ratio", type=float, default=None, help="Override config.SAMPLE_RATIO")
+parser.add_argument("--road_thresh", type=float, default=None, help="Override config.ROAD_THRESHOLD")
+parser.add_argument("--itsc_thresh", type=float, default=None, help="Override config.ITSC_THRESHOLD")
+parser.add_argument("--topo_thresh", type=float, default=None, help="Override config.TOPO_THRESHOLD")
+parser.add_argument("--road_nms", type=int, default=None, help="Override config.ROAD_NMS_RADIUS")
+parser.add_argument("--itsc_nms", type=int, default=None, help="Override config.ITSC_NMS_RADIUS")
+parser.add_argument("--nbr_radius", type=int, default=None, help="Override config.NEIGHBOR_RADIUS")
+parser.add_argument("--max_nbr_q", type=int, default=None, help="Override config.MAX_NEIGHBOR_QUERIES")
+# ==========================================
+
 args = parser.parse_args()
 
 
@@ -48,7 +63,6 @@ def get_img_paths(root_dir, image_indices):
         img_paths.append(os.path.join(root_dir, f"region_{ind}_sat.png"))
 
     return img_paths
-
 
 
 def crop_img_patch(img, x0, y0, x1, y1):
@@ -78,8 +92,6 @@ def infer_one_img(net, img, config):
         if patch_num % batch_size == 0
         else patch_num // batch_size + 1
     )
-
-    
 
     # [IMG_H, IMG_W]
     fused_keypoint_mask = torch.zeros(img.shape[0:2], dtype=torch.float32).to(args.device, non_blocking=False)
@@ -121,7 +133,6 @@ def infer_one_img(net, img, config):
     # pred_nodes, pred_edges = graph_utils.convert_from_nx(pred_graph)
     # return pred_nodes, pred_edges, fused_keypoint_mask, fused_road_mask
     # ## Astar graph extraction
-    
     
     ## Extract sample points from masks
     graph_points = graph_extraction.extract_graph_points(fused_keypoint_mask, fused_road_mask, config)
@@ -243,6 +254,50 @@ def infer_one_img(net, img, config):
 if __name__ == "__main__":
     config = load_config(args.config)
     
+    # [=== 修改 1：参数覆盖逻辑 (Override) ===]
+    # 按照 命令行参数(args) > 配置文件(config) 的优先级进行覆盖
+    if args.dataset is not None:     config.DATASET = args.dataset
+    if args.edge is not None:        config.INFER_PATCHES_PER_EDGE = args.edge
+    if args.ratio is not None:       config.SAMPLE_RATIO = args.ratio
+    if args.road_thresh is not None: config.ROAD_THRESHOLD = args.road_thresh
+    if args.itsc_thresh is not None: config.ITSC_THRESHOLD = args.itsc_thresh
+    if args.topo_thresh is not None: config.TOPO_THRESHOLD = args.topo_thresh
+    if args.road_nms is not None:    config.ROAD_NMS_RADIUS = args.road_nms
+    if args.itsc_nms is not None:    config.ITSC_NMS_RADIUS = args.itsc_nms
+    if args.nbr_radius is not None:  config.NEIGHBOR_RADIUS = args.nbr_radius
+    if args.max_nbr_q is not None:   config.MAX_NEIGHBOR_QUERIES = args.max_nbr_q
+
+    # [=== 修改 2：确定输出目录与初始化日志 ===]
+    if args.exp_id:
+        output_dir = os.path.join('./save', args.exp_id)
+        os.makedirs(output_dir, exist_ok=True)
+        # 存一份当前实验实际使用的 config 副本，防止以后忘了参数
+        import yaml
+        with open(os.path.join(output_dir, 'run_config.yaml'), 'w') as f:
+            # 兼容 config 是字典或命名空间对象的情况
+            yaml.dump(config if isinstance(config, dict) else config.__dict__, f)
+    else:
+        output_dir_prefix = './save/infer_'
+        if args.output_dir:
+            output_dir = create_output_dir_and_save_config(output_dir_prefix, config, specified_dir=f'./save/{args.output_dir}')
+        else:
+            output_dir = create_output_dir_and_save_config(output_dir_prefix, config)
+
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[
+            logging.FileHandler(os.path.join(output_dir, "run.log")),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"=== Starting Experiment: {args.exp_id if args.exp_id else 'Default'} ===")
+    logger.info(f"Task Mode: {args.task}")
+    logger.info(f"Using Device: {args.device}")
+
     # Builds eval model    
     device = torch.device("cuda") if args.device == "cuda" else torch.device("cpu")
     # Good when model architecture/input shape are fixed.
@@ -252,11 +307,12 @@ if __name__ == "__main__":
 
     # load checkpoint
     checkpoint = torch.load(args.checkpoint, map_location="cpu")
-    print(f'##### Loading Trained CKPT {args.checkpoint} #####')
+    logger.info(f'##### Loading Trained CKPT: {args.checkpoint} #####')
     net.load_state_dict(checkpoint["state_dict"], strict=True)
     net.eval()
     net.to(device)
 
+    # 数据集路径与 Index 加载
     if config.DATASET == 'cityscale':
         _, _, test_img_indices = cityscale_data_partition()
         rgb_pattern = './cityscale/20cities/region_{}_sat.png'
@@ -266,8 +322,6 @@ if __name__ == "__main__":
         rgb_pattern = './spacenet/RGB_1.0_meter/{}__rgb.png'
         gt_graph_pattern = './spacenet/RGB_1.0_meter/{}__gt_graph.p'
     elif config.DATASET == 'didi':
-        # def spacenet_data_partition():
-        # dataset partition
         with open('./xian/2019_400/data_split.json','r') as jf:
             import json
             data_list = json.load(jf)
@@ -277,18 +331,16 @@ if __name__ == "__main__":
 
         rgb_pattern = './xian/2019_400/xian_2019_400/region_{}_sat.png'
         gt_graph_pattern = './xian/2019_400/xian_2019_400/region_{}_graph_gt.pickle'
-    
-    output_dir_prefix = './save/infer_'
-    if args.output_dir:
-        output_dir = create_output_dir_and_save_config(output_dir_prefix, config, specified_dir=f'./save/{args.output_dir}')
     else:
-        output_dir = create_output_dir_and_save_config(output_dir_prefix, config)
+        raise ValueError(f"Unknown dataset type: {config.DATASET}")
     
     total_inference_seconds = 0.0
 
-    # ==========================================
-    # [=== 修改：引入 tqdm，并用 pbar.set_description 替代 print ===]
-    # ==========================================
+    # 动态获取 ratio 的字符串形式 (例如 0.5 或 0.25)，用于拼接路径
+    ratio_val = getattr(config, 'SAMPLE_RATIO', 0.5) 
+    # {ratio_val:g} 可以去掉末尾多余的0，比如 0.50 变成 0.5
+    ratio_folder = f"sample_{ratio_val:g}" 
+
     pbar = tqdm(test_img_indices, desc="Inference Progress")
     for img_id in pbar:
         # 动态更新进度条前面的文字，这样不会像普通 print 那样刷屏
@@ -296,33 +348,42 @@ if __name__ == "__main__":
         # [H, W, C] RGB
         img = read_rgb_img(rgb_pattern.format(img_id))
 
-        # ==========================================
-        # [=== 修改 1：根据 --task 参数决定第 4 通道的生成方式 ===]
-        # 因为底层模型已经是 4 通道输入，闭卷考试时一律给空先验
-        # empty_prior = np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)
-        # img_4c = np.concatenate([img, empty_prior], axis=-1)
-        
+        # # [=== 修改 3：根据 task 决定先验，动态拼接残缺图路径 ===]
         if args.task == "extraction":
             # 任务：盲提取 -> 使用全黑的先验
             prior = np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)
+            
         elif args.task == "update":
             # 任务：路网更新 -> 读取生成的残缺先验 (partial prior)
             if config.DATASET == 'cityscale':
-                partial_prior_path = f'./cityscale/sample_prior/region_{img_id}_refine_gt_graph_partial.png'
+                partial_prior_path = f'./cityscale/{ratio_folder}/region_{img_id}_refine_gt_graph_partial.png'
             elif config.DATASET == 'spacenet':
-                partial_prior_path = f'./spacenet/sample_prior/{img_id}__gt_graph_partial.png'
+                partial_prior_path = f'./spacenet/{ratio_folder}/{img_id}__gt_graph_partial.png'
             elif config.DATASET == 'didi':
-                partial_prior_path = f'./xian/2019_400/sample_prior/region_{img_id}_refine_gt_graph_partial.png'
-            else:
-                raise ValueError(f"Unknown dataset type: {config.DATASET}")
+                partial_prior_path = f'./xian/2019_400/{ratio_folder}/region_{img_id}_refine_gt_graph_partial.png'
             
-            # 尝试读取
             if os.path.exists(partial_prior_path):
                 partial_img = cv2.imread(partial_prior_path, cv2.IMREAD_GRAYSCALE)
                 prior = (partial_img.astype(np.float32) / 255.0)
                 prior = np.expand_dims(prior, axis=-1)
             else:
-                tqdm.write(f"[WARN] Partial prior not found: {partial_prior_path}. Falling back to empty prior.")
+                logger.warning(f"[WARN] Partial prior not found: {partial_prior_path}. Falling back to empty prior.")
+                prior = np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)
+                
+        elif args.task == "full":
+            if config.DATASET == 'cityscale':
+                partial_prior_path = f'./cityscale/20cities/region_{img_id}_gt.png'
+            elif config.DATASET == 'spacenet':
+                partial_prior_path = f'./spacenet/RGB_1.0_meter/{img_id}__gt.png'
+            elif config.DATASET == 'didi':
+                partial_prior_path = f'./xian/2019_400/xian_2019_400/region_{img_id}_gt.png'
+            
+            if os.path.exists(partial_prior_path):
+                partial_img = cv2.imread(partial_prior_path, cv2.IMREAD_GRAYSCALE)
+                prior = (partial_img.astype(np.float32) / 255.0)
+                prior = np.expand_dims(prior, axis=-1)
+            else:
+                logger.warning(f"[WARN] Full prior not found: {partial_prior_path}. Falling back to empty prior.")
                 prior = np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)
         else:
             raise ValueError(f"Unknown task: {args.task}")
@@ -330,14 +391,10 @@ if __name__ == "__main__":
 
         # 拼成 4 通道 [H, W, 4]
         img_4c = np.concatenate([img, prior], axis=-1)
-        # ==========================================
 
         start_seconds = time.time()
         # coords in (r, c)
-        # ==========================================
-        # [=== 修改 2：送入网络的必须是 4 通道变量 img_4c ===]
         pred_nodes, pred_edges, itsc_mask, road_mask = infer_one_img(net, img_4c, config)
-        # ==========================================
         end_seconds = time.time()
         total_inference_seconds += (end_seconds - start_seconds)
 
@@ -353,11 +410,9 @@ if __name__ == "__main__":
             gt_nodes = gt_nodes[:, ::-1]
 
         # RGB already
-        # ==========================================
-        # [=== 修改 3：保留原版 3 通道 img 用于 OpenCV 绘图 ===]
+        # 保留原版 3 通道 img 用于 OpenCV 绘图
         # 如果用 4 通道的 img_4c，OpenCV 的 cv2.imwrite 和 triage 画图会报错
         viz_img = np.copy(img)
-        # ==========================================
         img_size = viz_img.shape[0]
 
         # visualizes fused masks
@@ -408,7 +463,7 @@ if __name__ == "__main__":
         # print(f'Done for {img_id}.')
     
     # log inference time
-    time_txt = f'Inference completed for {args.config} in {total_inference_seconds} seconds.'
-    print(time_txt)
+    time_txt = f'Inference completed for {args.config} in {total_inference_seconds:.2f} seconds.'
+    logger.info(time_txt)
     with open(os.path.join(output_dir, 'inference_time.txt'), 'w') as f:
         f.write(time_txt)
