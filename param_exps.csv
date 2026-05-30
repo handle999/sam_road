@@ -20,3 +20,11 @@ exp_nbr_r32,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.5,0.341,0.
 exp_nbr_r128,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.5,0.341,0.195,0.705,16,8,128,16
 exp_nbr_q8,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.5,0.341,0.195,0.705,16,8,64,8
 exp_nbr_q32,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.5,0.341,0.195,0.705,16,8,64,32
+
+exp_r25_base,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.25,0.341,0.195,0.705,16,8,64,16
+exp_r25_th_mid,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.25,0.250,0.150,0.500,16,8,64,16
+exp_r25_th_low,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.25,0.150,0.100,0.300,16,8,64,16
+exp_r25_rad_96,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.25,0.341,0.195,0.705,16,8,96,24
+exp_r25_rad_128,update,config/toponet_vitb_256_spacenet.yaml,spacenet,2,0.25,0.341,0.195,0.705,16,8,128,32
+exp_r25_edge_4,update,config/toponet_vitb_256_spacenet.yaml,spacenet,4,0.25,0.341,0.195,0.705,16,8,64,16
+exp_r25_combo,update,config/toponet_vitb_256_spacenet.yaml,spacenet,4,0.25,0.250,0.150,0.500,16,8,96,24
