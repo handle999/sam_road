@@ -1,0 +1,15 @@
+# CityScale dataset metric configuration
+
+# APLS
+apls_interval: 15
+
+# TOPO
+topo_radius: 0.003
+topo_radius_small: 0.0015  # used when lat_top_left - min_lat < 0.01
+
+# Test split
+test_indices: [8, 9, 19, 28, 29, 39, 48, 49, 59, 68, 69, 79, 88, 89, 99, 108, 109, 119, 128, 129, 139, 148, 149, 159, 168, 169, 179]
+
+# Path patterns (relative to project root)
+gt_pattern: "datasets/cityscale/20cities/region_{}_graph_gt.pickle"
+pred_pattern: "{dir}/graph/{}.p"

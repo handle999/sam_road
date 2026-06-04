@@ -1,6 +1,3 @@
-[submodule "segment-anything-road"]
-	path = segment-anything-road
-	url = git@github.com:htcr/segment-anything-road.git
 [submodule "sam"]
 	path = sam
 	url = git@github.com:htcr/segment-anything-road.git

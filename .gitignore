@@ -1,18 +1,32 @@
-spacenet
-cityscale
-*.pyc
-*.lprof
-*.png
+# Data directories
+datasets/cityscale/20cities/
+datasets/spacenet/RGB_1.0_meter/
+datasets/spacenet/processed/
+datasets/spacenet/sample_*
+datasets/xian/
+datasets/chengdu/
 
-xian
-chengdu
-
+# Model checkpoints and outputs
 checkpoints
 save
 *.pth
 *.ckpt
 
+# Logs
 train_logs
 wandb
 
+# Python cache
+*.pyc
+__pycache__
+*.lprof
+
+# IDE
 .vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Images (generated outputs)
+*.png

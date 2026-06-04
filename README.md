@@ -54,26 +54,26 @@ Then, run "python generate_labes.py" under both dirs.
 
 ### Training
 City-scale dataset:  
-python train.py --config=config/toponet_vitb_512_cityscale.yaml  
+python engine/train.py --config=config/toponet_vitb_512_cityscale.yaml
 
 SpaceNet dataset:  
-python train.py --config=config/toponet_vitb_256_spacenet.yaml  
+python engine/train.py --config=config/toponet_vitb_256_spacenet.yaml
 
 You can find the checkpoints under lightning_logs dir.
 
 ### Inference
-python inferencer.py --config=path_to_the_same_config_for_training --checkpoint=path_to_ckpt  
+python engine/inferencer.py --config=path_to_the_same_config_for_training --checkpoint=path_to_ckpt  
 This saves the inference results and visualizations.
 
 Inferencing with our checkpoints:
 
 Cityscale:
 
-python inferencer.py --config=config/toponet_vitb_512_cityscale.yaml --checkpoint=/path_to/cityscale_vitb_512_e10.ckpt
+python engine/inferencer.py --config=config/toponet_vitb_512_cityscale.yaml --checkpoint=/path_to/cityscale_vitb_512_e10.ckpt
 
 Spacenet:
 
-python inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=/path_to/spacenet_vitb_256_e10.ckpt
+python engine/inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --checkpoint=/path_to/spacenet_vitb_256_e10.ckpt
 
 ### Test
 Go to cityscale_metrics or spacenet_metrics, and run  

@@ -532,8 +532,8 @@ def generate_completion_dataset(
 if __name__ == '__main__':
     # 示例: 为 SpaceNet 生成补全数据
     generate_completion_dataset(
-        image_dir='spacenet/RGB_1.0_meter',
-        gt_graph_dir='spacenet/RGB_1.0_meter',
+        image_dir='datasets/spacenet/RGB_1.0_meter',
+        gt_graph_dir='datasets/spacenet/RGB_1.0_meter',
         output_dir='spacenet/completion',
         keep_ratios=[0.3, 0.5, 0.7]
     )

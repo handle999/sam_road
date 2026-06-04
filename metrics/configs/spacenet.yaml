@@ -1,0 +1,14 @@
+# SpaceNet dataset metric configuration
+
+# APLS
+apls_interval: 10
+
+# TOPO
+topo_radius: 0.0015
+
+# Test split - read from JSON file
+test_split_file: "datasets/spacenet/data_split.json"
+
+# Path patterns (relative to project root)
+gt_pattern: "datasets/spacenet/RGB_1.0_meter/{}__gt_graph.p"
+pred_pattern: "{dir}/graph/{}.p"

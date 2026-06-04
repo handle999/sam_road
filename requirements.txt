@@ -1,0 +1,64 @@
+# =============================================================================
+# SAM-Road Dependencies (Linux + CUDA 12.1)
+# =============================================================================
+# Installation:
+#   1. conda create -n samroad python=3.10 -y && conda activate samroad
+#   2. pip install torch==2.1.2+cu121 torchvision==0.16.2+cu121 torchaudio==2.1.2 \
+#        --index-url https://download.pytorch.org/whl/cu121
+#   3. pip install torch-scatter torch-sparse torch-cluster torch-spline-conv \
+#        -f https://data.pyg.org/whl/torch-2.1.2+cu121.html
+#   4. pip install torch-geometric==2.4.0
+#   5. pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+#   6. cd sam && pip install -e . && cd ..
+#   7. conda install -c conda-forge go   (for APLS metric, optional)
+# =============================================================================
+
+# ---- Core: Deep Learning (install separately, see above) ----
+# torch==2.1.2+cu121
+# torchvision==0.16.2+cu121
+# torchaudio==2.1.2
+# torch-scatter
+# torch-sparse
+# torch-cluster
+# torch-spline-conv
+# torch-geometric==2.4.0
+
+# ---- Training & Logging ----
+lightning==2.2.1
+pytorch-lightning==2.2.1
+torchmetrics>=1.0
+wandb>=0.15
+tensorboard>=2.15
+
+# ---- Computer Vision & Image ----
+opencv-python>=4.8
+Pillow>=10.0
+imageio>=2.31
+scikit-image>=0.21
+
+# ---- Scientific Computing ----
+numpy>=1.24,<2.0
+scipy>=1.11
+scikit-learn>=1.3
+
+# ---- Graph & Geometry ----
+igraph>=0.11
+rtree>=1.1
+shapely>=2.0
+networkx>=3.1
+
+# ---- Data & Config ----
+addict>=2.4
+pyyaml>=6.0
+tcod>=1.2
+
+# ---- Visualization ----
+matplotlib>=3.8
+svgwrite>=1.4
+
+# ---- SAM Submodule (install separately: cd sam && pip install -e .) ----
+# segment-anything  (provides: segment_anything.modeling.*)
+# Dependencies already covered: torchvision, torch, opencv-python, pillow, matplotlib, pyyaml
+
+# ---- Optional: Metric (APLS) ----
+# go >= 1.21  (install via: conda install -c conda-forge go)
