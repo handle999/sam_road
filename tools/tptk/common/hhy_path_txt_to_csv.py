@@ -113,19 +113,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "-i", "--input",
         required=True,
-        help="Input folder containing path .txt files (e.g., ../xian/seg_mm_path_5)"
+        help="Input folder containing path .txt files (e.g., ../datasets/didi/xian/seg_mm_path_5)"
     )
 
     parser.add_argument(
         "-o", "--output",
         required=True,
-        help="Output folder for converted .csv files (e.g., ../xian/seg_mm_path_5_csv)"
+        help="Output folder for converted .csv files (e.g., ../datasets/di../datasets/didi/xian/seg_mm_path_5_csv)"
     )
     
     parser.add_argument(
         "--rn_path",
         required=True,
-        help="Path to the road network shapefile (e.g., ../xian/osm/rn-comp-xa-190101-didi/edges.shp)"
+        help="Path to the road network shapefile (e.g., ../datasets/didi/xian/osm/rn-comp-xa-190101-didi/edges.shp)"
     )
     
     args = parser.parse_args()

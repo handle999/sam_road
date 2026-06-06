@@ -322,15 +322,15 @@ if __name__ == "__main__":
         rgb_pattern = './datasets/spacenet/RGB_1.0_meter/{}__rgb.png'
         gt_graph_pattern = './datasets/spacenet/RGB_1.0_meter/{}__gt_graph.p'
     elif config.DATASET == 'didi':
-        with open('./xian/2019_400/data_split.json','r') as jf:
+        with open('datasets/didi/xian/2019_400/data_split.json','r') as jf:
             import json
             data_list = json.load(jf)
             train_img_indices = data_list['train']
             val_img_indices = data_list['validation']
             test_img_indices = data_list['test']
 
-        rgb_pattern = './xian/2019_400/xian_2019_400/region_{}_sat.png'
-        gt_graph_pattern = './xian/2019_400/xian_2019_400/region_{}_graph_gt.pickle'
+        rgb_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_sat.png'
+        gt_graph_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_graph_gt.pickle'
     else:
         raise ValueError(f"Unknown dataset type: {config.DATASET}")
     
@@ -360,7 +360,7 @@ if __name__ == "__main__":
             elif config.DATASET == 'spacenet':
                 partial_prior_path = f'./datasets/spacenet/{ratio_folder}/{img_id}__gt_graph_partial.png'
             elif config.DATASET == 'didi':
-                partial_prior_path = f'./xian/2019_400/{ratio_folder}/region_{img_id}_refine_gt_graph_partial.png'
+                partial_prior_path = f'datasets/didi/xian/2019_400/{ratio_folder}/region_{img_id}_refine_gt_graph_partial.png'
             
             if os.path.exists(partial_prior_path):
                 partial_img = cv2.imread(partial_prior_path, cv2.IMREAD_GRAYSCALE)
@@ -376,7 +376,7 @@ if __name__ == "__main__":
             elif config.DATASET == 'spacenet':
                 partial_prior_path = f'./datasets/spacenet/RGB_1.0_meter/{img_id}__gt.png'
             elif config.DATASET == 'didi':
-                partial_prior_path = f'./xian/2019_400/xian_2019_400/region_{img_id}_gt.png'
+                partial_prior_path = f'datasets/didi/xian/2019_400/xian_2019_400/region_{img_id}_gt.png'
             
             if os.path.exists(partial_prior_path):
                 partial_img = cv2.imread(partial_prior_path, cv2.IMREAD_GRAYSCALE)
@@ -404,7 +404,7 @@ if __name__ == "__main__":
         if len(gt_nodes) == 0:
             gt_nodes = np.zeros([0, 2], dtype=np.float32)
 
-        if config.DATASET == 'spacenet':
+        if config.DATASET == "spacenet" or config.DATASET == "didi_xian" or config.DATASET == "xian":
             # convert ??? -> xy -> rc
             gt_nodes = np.stack([gt_nodes[:, 1], 400 - gt_nodes[:, 0]], axis=1)
             gt_nodes = gt_nodes[:, ::-1]
@@ -449,7 +449,7 @@ if __name__ == "__main__":
         cv2.imwrite(os.path.join(viz_save_dir, f'{img_id}.png'), viz_img)
 
         # Saves the large map
-        if config.DATASET == 'spacenet':
+        if config.DATASET == "spacenet" or config.DATASET == "didi_xian" or config.DATASET == "xian":
             # r, c -> ???
             pred_nodes = np.stack([400 - pred_nodes[:, 0], pred_nodes[:, 1]], axis=1)
         large_map_sat2graph_format = graph_utils.convert_to_sat2graph_format(pred_nodes, pred_edges)

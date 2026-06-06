@@ -55,14 +55,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "-i", "--input",
         required=True,
-        default=r"./xian/seg_mm_traj",
+        default=r"./datasets/didi/xian/seg_mm_traj",
         help="Input folder containing trajectory .txt files"
     )
 
     parser.add_argument(
         "-o", "--output",
         required=True,
-        default=r"./xian/seg_mm_traj_csv",
+        default=r"./datasets/didi/xian/seg_mm_traj_csv",
         help="Output folder for converted .csv files"
     )
     

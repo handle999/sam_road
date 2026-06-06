@@ -58,7 +58,7 @@ def spacenet_data_partition():
 # [MODIFICATION 1]: 新增 xian 数据集的划分函数
 def didi_data_partition():
     # dataset partition
-    with open('./xian/2019_400/data_split.json','r') as jf:
+    with open('datasets/didi/xian/2019_400/data_split.json','r') as jf:
         data_list = json.load(jf)
         # data_list = data_list['test'] + data_list['validation'] + data_list['train']
     # train_list = [tile_index for _, tile_index in data_list['train']]
@@ -268,7 +268,7 @@ def test_graph_label_generator():
         coord_transform = lambda v : np.stack([v[:, 1], 400 - v[:, 0]], axis=1)
         # coord_transform = lambda v : v[:, ::-1]
     elif dataset == 'didi':
-        rgb_path = './xian/2019_400/xian_2019_400/region_370_sat.png'
+        rgb_path = 'datasets/didi/xian/2019_400/xian_2019_400/region_370_sat.png'
         # Load GT Graph
         gt_graph = pickle.load(open(f"./xian/2019_400/xian_2019_400/region_370_refine_gt_graph.p",'rb'))
         coord_transform = lambda v : v[:, ::-1]
@@ -392,23 +392,23 @@ class SatMapDataset(Dataset):
             
             # 假设你的 xian 放在根目录或者 xian 目录下，这里做对应修改
             # 你提到的文件名是 region_0_sat.png 等
-            rgb_pattern = './xian/2019_400/xian_2019_400/region_{}_sat.png'
+            rgb_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_sat.png'
 
             # 注意区分 train 和 test 的 active mask 路径和命名
             if self.is_train:
-                active_mask_pattern = './xian/2019_400/xian_2019_400/region_{}_active.png' # 或 _gt.png
+                active_mask_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_active.png' # 或 _gt.png
             else:
-                active_mask_pattern = './xian/2019_400/sample_0.5/region_{}_refine_gt_graph_partial.png'
+                active_mask_pattern = 'datasets/didi/xian/2019_400/sample_0.5/region_{}_refine_gt_graph_partial.png'
             
             # 注意：SAM-Road 需要从 gt_graph 或者 gt.png 生成 keypoint 和 road mask
             # 需要先运行 SAM-Road 提供的预处理脚本生成 processed/ 目录
-            keypoint_mask_pattern = './xian/2019_400/processed/keypoint_mask_{}.png'
-            road_mask_pattern = './xian/2019_400/processed/road_mask_{}.png'
+            keypoint_mask_pattern = 'datasets/didi/xian/2019_400/processed/keypoint_mask_{}.png'
+            road_mask_pattern = 'datasets/didi/xian/2019_400/processed/road_mask_{}.png'
             
-            gt_graph_pattern = './xian/2019_400/xian_2019_400/region_{}_refine_gt_graph.p'
+            gt_graph_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_refine_gt_graph.p'
             
             train, val, test = didi_data_partition()
-            coord_transform = lambda v : v[:, ::-1] # 假设和 cityscale 一样是 (r, c)
+            coord_transform = lambda v : np.stack([v[:, 1], 400 - v[:, 0]], axis=1)  # xian是(y_up,x)格式，和spacenet一致
         # ==========================================
 
         train_split = train + val

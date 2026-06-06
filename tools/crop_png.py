@@ -109,7 +109,7 @@ if __name__ == "__main__":
     # 方式：左下 -> 右上
 
     INPUT_IMG = "../dataset/xian-z18-arcgis.png"
-    OUTPUT_DIR = "../dataset/img/xian/arcgis"
+    OUTPUT_DIR = "../datasets/didi/xian/arcgis"
 
     # 裁剪参数
     CROP_SIZE = (400, 400)

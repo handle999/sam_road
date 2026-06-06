@@ -129,8 +129,8 @@ def process_folder(input_folder, output_folder):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input", required=True, default=r"./xian/seg_mm_traj")
-    parser.add_argument("-o", "--output", required=True, default=r"./xian/seg_mm_traj_csv")
+    parser.add_argument("-i", "--input", required=True, default=r"./datasets/didi/xian/seg_mm_traj")
+    parser.add_argument("-o", "--output", required=True, default=r"./datasets/didi/xian/seg_mm_traj_csv")
     args = parser.parse_args()
     
     process_folder(args.input, args.output)

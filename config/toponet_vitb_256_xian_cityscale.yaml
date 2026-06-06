@@ -1,4 +1,4 @@
-DATASET: 'didi'
+DATASET: 'didi_xian'
 
 # IN1k + MAE only
 NO_SAM: False

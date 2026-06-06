@@ -51,9 +51,9 @@ elif args.dataset == 'spacenet':
     pred_pattern = '../{savedir}/graph/{idx}.p'
     topo_r = args.topo_radius if args.topo_radius else 0.0015
 elif args.dataset == 'didi':
-    with open('../xian/2019_400/data_split.json', 'r') as jf:
+    with open('../datasets/didi/xian/2019_400/data_split.json', 'r') as jf:
         test_indices = json.load(jf)['test']
-    gt_pattern = '../xian/2019_400/xian_2019_400/region_{}_graph_gt.pickle'
+    gt_pattern = '../datasets/didi/xian/2019_400/xian_2019_400/region_{}_graph_gt.pickle'
     pred_pattern = '../{savedir}/graph/{idx}.p'
     topo_r = args.topo_radius if args.topo_radius else 0.0015
 
