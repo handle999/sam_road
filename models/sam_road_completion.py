@@ -1,22 +1,19 @@
 """
-SAM-Road Completion Model
-=========================
-路网补全模型: 输入遥感影像 + 已知路网(pickle) → 补全后的完整路网
+SAM-Road Completion v2 Model
+=============================
+路网补全模型: 输入遥感影像(+可选轨迹热力图) + 已知路网 → 补全后的完整路网
 
-核心设计:
-  - Stage 1 (SAM): 不变, 提取视觉特征 + 分割 mask
-  - Stage 2 (TopoNet 改进): 融合视觉特征 + 已知路网结构特征, 预测边连接
+核心设计 (方案B):
+  - 路径A: traj_heatmap 作为 SAM Encoder 的第4通道输入 (浅层注入, 无traj时全零退化)
+  - 路径B: 已知路网边通过 RoadGraphGNN 编码拓扑先验
+  - road_feature_map: 2通道 (已知路mask + 已知节点位置), CNN编码后与视觉特征融合
+  - 训练时: 所有数据集统一用随机采样GT作为已知路网
+  - 推理时: 通过最近邻映射将已知路网边关联到NMS关键点索引
 
-已知路网信息的注入方式:
-  1. 渲染几何特征图 (4通道: mask/距离场/方向场/节点位置) → CNN编码 → 与视觉特征融合
-  2. GNN 编码已知路网拓扑结构 → 拼接到 TopoNet pair_proj 输入
-
-这样做的核心思路:
-  - 模型从遥感影像看到路 → 预测需要补全的边
-  - 模型从已知路网特征学会 → 不重复、不矛盾
-  - 不对"需要补全"做任何先验假设 (度数=1不代表需要补全)
-
-不修改原版代码, 完全独立的新文件。
+退化逻辑:
+  - 无traj + 无已知路网 → 等价于原始 SAM-Road (extraction)
+  - 无traj + 有已知路网 → Completion无traj模式
+  - 有traj + 有已知路网 → Completion有traj模式 (效果最好)
 """
 
 import torch
@@ -56,7 +53,7 @@ class TopoNetCompletion(nn.Module):
     相比原版 TopoNet 的修改:
       - pair_proj 输入维度增加: 2*D + 2 → 2*D + 2 + 2*graph_dim
       - 新增 graph_proj: 将 GNN 输出的图拓扑嵌入拼接到候选边特征中
-      - graph_features=None 时退化为原版 TopoNet (方便消融)
+      - graph_embeddings=None 时退化为原版 TopoNet (方便消融)
     """
 
     def __init__(self, config, feature_dim, graph_dim=32):
@@ -149,23 +146,21 @@ class TopoNetCompletion(nn.Module):
 
 class RoadGraphEncoder(nn.Module):
     """
-    已知路网几何特征图编码器
+    已知路网几何特征图编码器 (v2: 2通道版)
 
-    将已知路网渲染的4通道特征图 (mask/距离场/方向场/节点位置)
+    将已知路网渲染的2通道特征图 (mask + 节点位置)
     编码为与 image_embeddings 维度对齐的特征图 [B, 256, 16, 16]
 
-    所有通道都是客观几何描述, 不带"需要补全"的假设:
-      - ch0: 已知道路 mask (哪里有路)
-      - ch1: 距离场 (离已知路多远)
-      - ch2: 方向场 (已知路的方向)
-      - ch3: 已知节点位置 (确定的路网节点)
+    通道说明 (v2精简版):
+      - ch0: 已知道路 mask (哪里有路) — CNN无法从RGB 100%确定, 是强先验
+      - ch1: 已知节点位置 (确定的路网节点) — 区分已知/未知节点
     """
 
     def __init__(self, output_dim=256):
         super(RoadGraphEncoder, self).__init__()
         self.encoder = nn.Sequential(
-            # 输入: [B, 4, H, W] (H=W=PATCH_SIZE, 如256)
-            nn.Conv2d(4, 32, 3, padding=1), nn.BatchNorm2d(32), nn.GELU(),
+            # 输入: [B, 2, H, W] (H=W=PATCH_SIZE, 如256)
+            nn.Conv2d(2, 32, 3, padding=1), nn.BatchNorm2d(32), nn.GELU(),
             nn.Conv2d(32, 64, 3, stride=4, padding=1), nn.BatchNorm2d(64), nn.GELU(),
             # → [B, 64, H/4, W/4]
             nn.Conv2d(64, 128, 3, stride=4, padding=1), nn.BatchNorm2d(128), nn.GELU(),
@@ -177,7 +172,7 @@ class RoadGraphEncoder(nn.Module):
     def forward(self, road_feature_map):
         """
         Args:
-            road_feature_map: [B, 4, H, W] 渲染的已知路网特征图
+            road_feature_map: [B, 2, H, W] 渲染的已知路网特征图
         Returns:
             road_embeddings: [B, 256, H/16, W/16]
         """
@@ -240,10 +235,12 @@ class RoadGraphGNN(nn.Module):
         # adj_mask: [B, N, N], True=可以注意, False=屏蔽
         if edge_index is not None and edge_index.shape[2] > 0:
             adj_mask = self._build_adj_mask(edge_index, B, N, node_coords.device)
-            # 转换为 attn_mask 格式: True=可以注意, False=屏蔽
-            # PyTorch MHA 的 attn_mask: float, 0=可以注意, -inf=屏蔽
+            # 转换为 attn_mask 格式: float, 0=可以注意, -inf=屏蔽
+            # PyTorch MHA 的 attn_mask 3D 格式: (B*num_heads, L, S)
             attn_mask = torch.zeros(B, N, N, device=node_coords.device, dtype=x.dtype)
             attn_mask = attn_mask.masked_fill(~adj_mask, float('-inf'))
+            # 扩展到 num_heads: [B, N, N] -> [B*num_heads, N, N]
+            attn_mask = attn_mask.repeat_interleave(self.gat_layers[0].num_heads, dim=0)
         else:
             # 没有已知路网边, 全连接注意力
             attn_mask = None
@@ -305,18 +302,20 @@ class _LoRA_qkv(nn.Module):
 
 class SAMRoadCompletion(pl.LightningModule):
     """
-    SAM-Road 路网补全模型
+    SAM-Road 路网补全模型 v2
 
     输入:
-      - 遥感影像 [B, H, W, 3]
-      - 已知路网渲染特征图 [B, 4, H, W] (mask/距离/方向/节点)
+      - rgb [B, H, W, 3] + traj_heatmap [B, H, W, 1] → concat为 [B, H, W, 4]
+        (无traj时 traj_heatmap=zeros, 等价于3ch输入, 但patch_embed第4通道零初始化保证退化)
+      - 已知路网渲染特征图 [B, 2, H, W] (mask + 节点位置)
       - 已知路网边索引 [B, 2, E] (用于 GNN)
     输出:
       - 分割 mask (keypoint + road)
       - 候选边连接概率
 
-    训练时: 从完整 GT 图随机删边模拟不完整输入
-    推理时: 用户提供已知路网, 模型预测需要添加的边
+    路径A: traj_heatmap → SAM第4通道 → 更好的image_embeddings
+    路径B: known_edge_index → GNN → 更好的拓扑预测
+    road_feature_map → CNN → 与image_embeddings融合 → fused_features
     """
 
     def __init__(self, config):
@@ -348,10 +347,12 @@ class SAMRoadCompletion(pl.LightningModule):
         image_embedding_size = image_size // vit_patch_size
         encoder_output_dim = prompt_embed_dim
 
-        self.register_buffer("pixel_mean", torch.Tensor([123.675, 116.28, 103.53]).view(-1, 1, 1), False)
-        self.register_buffer("pixel_std", torch.Tensor([58.395, 57.12, 57.375]).view(-1, 1, 1), False)
+        # ---- 路径A: 4通道 pixel_mean/std ----
+        # 第4通道(traj_heatmap)取值0~1, mean=0, std=1, 不影响原始分布
+        self.register_buffer("pixel_mean", torch.Tensor([123.675, 116.28, 103.53, 0.0]).view(-1, 1, 1), False)
+        self.register_buffer("pixel_std", torch.Tensor([58.395, 57.12, 57.375, 1.0]).view(-1, 1, 1), False)
 
-        # ---- SAM Image Encoder (不变) ----
+        # ---- SAM Image Encoder ----
         if self.config.NO_SAM:
             raise NotImplementedError("NO_SAM mode not supported in completion model")
         else:
@@ -370,7 +371,13 @@ class SAMRoadCompletion(pl.LightningModule):
                 out_chans=prompt_embed_dim
             )
 
-        # ---- Map Decoder (不变, 与原版相同) ----
+        # ---- 路径A: 修改 patch_embed 为 4 通道 ----
+        old_proj = self.image_encoder.patch_embed.proj
+        out_ch, _, k_h, k_w = old_proj.weight.shape
+        new_proj = nn.Conv2d(4, out_ch, kernel_size=(k_h, k_w), stride=(k_h, k_w), bias=True)
+        self.image_encoder.patch_embed.proj = new_proj
+
+        # ---- Map Decoder (不变, 与原版相同, 只用image_embeddings) ----
         if self.config.USE_SAM_DECODER:
             from sam.segment_anything.modeling.mask_decoder import MaskDecoder
             from sam.segment_anything.modeling.prompt_encoder import PromptEncoder
@@ -405,17 +412,17 @@ class SAMRoadCompletion(pl.LightningModule):
                 nn.ConvTranspose2d(32, 2, kernel_size=2, stride=2),
             )
 
-        # ---- 已知路网几何特征编码器 (新增) ----
+        # ---- 已知路网几何特征编码器 (2通道版) ----
         self.road_feat_encoder = RoadGraphEncoder(output_dim=encoder_output_dim)
 
-        # ---- 视觉特征 + 路网特征融合 (新增) ----
+        # ---- 视觉特征 + 路网特征融合 ----
         self.feature_fusion = nn.Sequential(
             nn.Conv2d(encoder_output_dim + encoder_output_dim, encoder_output_dim, 1),
             nn.GELU(),
             nn.Conv2d(encoder_output_dim, encoder_output_dim, 1),
         )
 
-        # ---- 已知路网 GNN 编码器 (新增) ----
+        # ---- 已知路网 GNN 编码器 ----
         graph_dim = getattr(config, 'GRAPH_DIM', 32)
         self.graph_dim = graph_dim
         self.road_graph_gnn = RoadGraphGNN(
@@ -427,7 +434,7 @@ class SAMRoadCompletion(pl.LightningModule):
         self.bilinear_sampler = BilinearSampler(config)
         self.topo_net = TopoNetCompletion(config, encoder_output_dim, graph_dim=graph_dim)
 
-        # ---- LoRA (与原版相同) ----
+        # ---- LoRA ----
         if config.ENCODER_LORA:
             r = self.config.LORA_RANK
             assert r > 0
@@ -436,6 +443,12 @@ class SAMRoadCompletion(pl.LightningModule):
             self.w_Bs = []
             for param in self.image_encoder.parameters():
                 param.requires_grad = False
+
+            # 路径A: 强制解冻 patch_embed (第4通道必须训练)
+            self.image_encoder.patch_embed.proj.weight.requires_grad = True
+            if self.image_encoder.patch_embed.proj.bias is not None:
+                self.image_encoder.patch_embed.proj.bias.requires_grad = True
+
             for t_layer_i, blk in enumerate(self.image_encoder.blocks):
                 if t_layer_i not in self.lora_layer_selection:
                     continue
@@ -489,6 +502,15 @@ class SAMRoadCompletion(pl.LightningModule):
                 if k in ckpt_state_dict and v.shape == ckpt_state_dict[k].shape:
                     matched_names.append(k)
                     state_dict_to_load[k] = ckpt_state_dict[k]
+                elif k == 'image_encoder.patch_embed.proj.weight' and k in ckpt_state_dict:
+                    # 路径A: 3通道权重拷贝给前3通道, 第4通道零初始化
+                    print(f"[{k}] Adapting SAM weights from 3 channels to 4 channels.")
+                    old_weight = ckpt_state_dict[k]
+                    new_weight = torch.zeros_like(v)
+                    new_weight[:, :3, :, :] = old_weight
+                    # 第4通道保持全零初始化
+                    matched_names.append(k)
+                    state_dict_to_load[k] = new_weight
                 else:
                     mismatch_names.append(k)
             print("###### Matched params ######")
@@ -519,11 +541,12 @@ class SAMRoadCompletion(pl.LightningModule):
                 new_state_dict[k] = rel_pos_params[0, 0, ...]
         return new_state_dict
 
-    def forward(self, rgb, road_feature_map, graph_points, pairs, valid, known_edge_index=None):
+    def forward(self, rgb, traj_heatmap, road_feature_map, graph_points, pairs, valid, known_edge_index=None):
         """
         Args:
             rgb: [B, H, W, 3] 遥感影像
-            road_feature_map: [B, 4, H, W] 已知路网渲染特征图
+            traj_heatmap: [B, H, W, 1] 轨迹热力图 (无traj时全零)
+            road_feature_map: [B, 2, H, W] 已知路网渲染特征图 (mask + 节点位置)
             graph_points: [B, N_points, 2] 图节点坐标
             pairs: [B, N_samples, N_pairs, 2] 候选边索引
             valid: [B, N_samples, N_pairs] 有效边掩码
@@ -534,8 +557,9 @@ class SAMRoadCompletion(pl.LightningModule):
             topo_logits: [B, N_samples, N_pairs, 1]
             topo_scores: [B, N_samples, N_pairs, 1]
         """
-        # ---- Stage 1: SAM 视觉编码 ----
-        x = rgb.permute(0, 3, 1, 2)
+        # ---- 路径A: 4通道输入 → SAM Encoder ----
+        x = torch.cat([rgb, traj_heatmap], dim=3)  # [B, H, W, 4]
+        x = x.permute(0, 3, 1, 2)  # [B, 4, H, W]
         x = (x - self.pixel_mean) / self.pixel_std
         image_embeddings = self.image_encoder(x)  # [B, 256, h, w]
 
@@ -547,7 +571,7 @@ class SAMRoadCompletion(pl.LightningModule):
             torch.cat([image_embeddings, road_embeddings], dim=1)
         )  # [B, 256, h, w]
 
-        # ---- 分割头 (用 image_embeddings, 不混入路网信息, 避免过拟合) ----
+        # ---- 分割头 (只用image_embeddings, 不混入路网信息, 避免过拟合) ----
         if self.config.USE_SAM_DECODER:
             sparse_embeddings, dense_embeddings = self.prompt_encoder(
                 points=None, boxes=None, masks=None
@@ -573,7 +597,7 @@ class SAMRoadCompletion(pl.LightningModule):
         # 从融合特征图采样节点特征 (包含视觉 + 路网几何信息)
         point_features = self.bilinear_sampler(fused_features, graph_points)  # [B, N, 256]
 
-        # GNN 编码已知路网拓扑
+        # 路径B: GNN 编码已知路网拓扑
         if known_edge_index is not None and known_edge_index.shape[2] > 0:
             graph_embeddings = self.road_graph_gnn(
                 point_features, graph_points, known_edge_index
@@ -589,18 +613,20 @@ class SAMRoadCompletion(pl.LightningModule):
         mask_scores = mask_scores.permute(0, 2, 3, 1)
         return mask_logits, mask_scores, topo_logits, topo_scores
 
-    def infer_masks_and_img_features(self, rgb, road_feature_map):
+    def infer_masks_and_img_features(self, rgb, traj_heatmap, road_feature_map):
         """
         推理阶段: 获取分割 mask 和融合特征图
 
         Args:
             rgb: [B, H, W, 3]
-            road_feature_map: [B, 4, H, W]
+            traj_heatmap: [B, H, W, 1]
+            road_feature_map: [B, 2, H, W]
         Returns:
             mask_scores: [B, H, W, 2]
             fused_features: [B, 256, h, w]
         """
-        x = rgb.permute(0, 3, 1, 2)
+        x = torch.cat([rgb, traj_heatmap], dim=3)  # [B, H, W, 4]
+        x = x.permute(0, 3, 1, 2)  # [B, 4, H, W]
         x = (x - self.pixel_mean) / self.pixel_std
         image_embeddings = self.image_encoder(x)
 
@@ -659,14 +685,16 @@ class SAMRoadCompletion(pl.LightningModule):
         return topo_scores
 
     def training_step(self, batch, batch_idx):
-        rgb = batch['rgb']
+        rgb = batch['rgb']  # [B, H, W, 3]
+        traj_heatmap = batch.get('traj_heatmap', torch.zeros(rgb.shape[0], rgb.shape[1], rgb.shape[2], 1,
+                                                               dtype=rgb.dtype, device=rgb.device))
         keypoint_mask, road_mask = batch['keypoint_mask'], batch['road_mask']
         graph_points, pairs, valid = batch['graph_points'], batch['pairs'], batch['valid']
         road_feature_map = batch['road_feature_map']
         known_edge_index = batch.get('known_edge_index', None)
 
         mask_logits, mask_scores, topo_logits, topo_scores = self(
-            rgb, road_feature_map, graph_points, pairs, valid, known_edge_index
+            rgb, traj_heatmap, road_feature_map, graph_points, pairs, valid, known_edge_index
         )
 
         gt_masks = torch.stack([keypoint_mask, road_mask], dim=3)
@@ -686,13 +714,15 @@ class SAMRoadCompletion(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         rgb = batch['rgb']
+        traj_heatmap = batch.get('traj_heatmap', torch.zeros(rgb.shape[0], rgb.shape[1], rgb.shape[2], 1,
+                                                               dtype=rgb.dtype, device=rgb.device))
         keypoint_mask, road_mask = batch['keypoint_mask'], batch['road_mask']
         graph_points, pairs, valid = batch['graph_points'], batch['pairs'], batch['valid']
         road_feature_map = batch['road_feature_map']
         known_edge_index = batch.get('known_edge_index', None)
 
         mask_logits, mask_scores, topo_logits, topo_scores = self(
-            rgb, road_feature_map, graph_points, pairs, valid, known_edge_index
+            rgb, traj_heatmap, road_feature_map, graph_points, pairs, valid, known_edge_index
         )
 
         gt_masks = torch.stack([keypoint_mask, road_mask], dim=3)
@@ -729,13 +759,15 @@ class SAMRoadCompletion(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         rgb = batch['rgb']
+        traj_heatmap = batch.get('traj_heatmap', torch.zeros(rgb.shape[0], rgb.shape[1], rgb.shape[2], 1,
+                                                               dtype=rgb.dtype, device=rgb.device))
         keypoint_mask, road_mask = batch['keypoint_mask'], batch['road_mask']
         graph_points, pairs, valid = batch['graph_points'], batch['pairs'], batch['valid']
         road_feature_map = batch['road_feature_map']
         known_edge_index = batch.get('known_edge_index', None)
 
         mask_logits, mask_scores, topo_logits, topo_scores = self(
-            rgb, road_feature_map, graph_points, pairs, valid, known_edge_index
+            rgb, traj_heatmap, road_feature_map, graph_points, pairs, valid, known_edge_index
         )
 
         topo_gt = batch['connected'].to(torch.int32)
@@ -776,7 +808,8 @@ class SAMRoadCompletion(pl.LightningModule):
             param_dicts.append(encoder_params)
         if self.config.ENCODER_LORA:
             encoder_params = {
-                'params': [p for k, p in self.image_encoder.named_parameters() if 'qkv.linear_' in k],
+                'params': [p for k, p in self.image_encoder.named_parameters()
+                           if 'qkv.linear_' in k or 'patch_embed' in k],
                 'lr': self.config.BASE_LR,
             }
             param_dicts.append(encoder_params)

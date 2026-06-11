@@ -1,15 +1,24 @@
 """
-SAM-Road Completion Training Script
-====================================
+SAM-Road Completion v2 Training Script
+========================================
 路网补全模型训练脚本
 
-与原版 train.py 的差异:
-  - 使用 SAMRoadCompletion 模型
-  - 使用 SatMapCompletionDataset 数据集
+v2 变更:
+  - SAMRoadCompletion 模型支持 4ch 输入 (RGB + traj_heatmap)
+  - 数据集返回 traj_heatmap (Xian 有, 其他全零)
+  - 动态 keep_ratio (U[0.2, 0.8])
   - 每个 epoch 刷新已知图 (重新随机删边)
+  - EarlyStopping + Best-5 Checkpoint
 """
 
 from argparse import ArgumentParser
+import os
+import sys
+# 确保项目根目录在 sys.path 中
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -21,9 +30,8 @@ from models.sam_road_completion import SAMRoadCompletion
 
 import wandb
 import lightning.pytorch as pl
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 from pytorch_lightning.loggers import WandbLogger
-from lightning.pytorch.callbacks import LearningRateMonitor
 
 
 parser = ArgumentParser()
@@ -85,11 +93,24 @@ if __name__ == "__main__":
         collate_fn=completion_graph_collate_fn,
     )
 
+    # ---- Checkpoint: 保存 val_loss 最小的 top-5 ----
     checkpoint_callback = ModelCheckpoint(
         dirpath="checkpoints/samroad_completion/",
-        every_n_epochs=1,
-        save_top_k=-1
+        filename="completion-{epoch:02d}-{val_loss:.4f}",
+        monitor="val_loss",
+        mode="min",
+        save_top_k=5,
+        save_last=True,  # 额外保存最后一个 epoch
     )
+
+    # ---- Early Stopping: val_loss 连续 5 epoch 不降则停 ----
+    early_stop_callback = EarlyStopping(
+        monitor="val_loss",
+        patience=5,
+        mode="min",
+        verbose=True,
+    )
+
     lr_monitor = LearningRateMonitor(logging_interval='step')
     refresh_callback = CompletionRefreshCallback()
 
@@ -97,12 +118,14 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         max_epochs=config.TRAIN_EPOCHS,
+        accelerator="gpu",
+        devices=1,  # 单卡训练
         check_val_every_n_epoch=1,
         num_sanity_val_steps=2,
-        callbacks=[checkpoint_callback, lr_monitor, refresh_callback],
+        callbacks=[checkpoint_callback, early_stop_callback, lr_monitor, refresh_callback],
         logger=wandb_logger,
         fast_dev_run=args.fast_dev_run,
         precision=args.precision,
     )
 
-    trainer.fit(net, train_dataloaders=train_loader, val_dataloaders=val_loader)
+    trainer.fit(net, train_dataloaders=train_loader, val_dataloaders=val_loader, ckpt_path=args.resume)

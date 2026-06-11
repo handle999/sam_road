@@ -1,15 +1,15 @@
 """
-SAM-Road Completion Dataset
-===========================
+SAM-Road Completion v2 Dataset
+===============================
 路网补全数据集: 从完整 GT 图随机删除边, 模拟不完整路网输入
 
-与原版 SatMapDataset 的差异:
-  1. 随机删除部分边构造已知图 (keep_ratio)
-  2. 渲染已知路网的4通道几何特征图 (mask/距离场/方向场/节点位置)
-  3. 已知已有边的候选对标记为 valid=False (不计入 topo loss)
-  4. 返回 known_edge_index 用于 GNN 编码
-
-不修改原版 dataset.py。
+v2 变更 (对齐方案B):
+  1. road_feature_map: 2通道 (ch0=已知路mask, ch1=已知节点位置), 去掉距离场和方向场
+  2. 动态 keep_ratio: 每次采样随机 U[0.2, 0.8], 不固定0.5
+  3. 支持 traj_heatmap: Xian 数据集加载 active.png, 其他数据集返回全零
+  4. 修复 known_edge_index: 正确映射到 NMS 后节点索引
+  5. 修复特征图一致性: 渲染和标签使用同一组删边
+  6. 模态 Dropout: 20%概率清空所有先验 (road_feature_map + traj_heatmap + known_edge_index)
 """
 
 import numpy as np
@@ -75,13 +75,11 @@ def get_patch_info_one_img(image_index, image_size, sample_margin, patch_size, p
 
 def render_graph_feature_map(known_graph_adj, patch_x0, patch_y0, patch_size):
     """
-    从已知路网的邻接表渲染4通道几何特征图
+    从已知路网的邻接表渲染2通道几何特征图 (v2精简版)
 
-    所有通道都是客观几何描述, 不带"需要补全"的假设:
-      - ch0: 已知道路 mask (哪里有路)
-      - ch1: 距离场 (离已知路多远)
-      - ch2: 方向场 (已知路的方向)
-      - ch3: 已知节点位置 (确定的路网节点)
+    通道说明:
+      - ch0: 已知道路 mask (哪里有路) — CNN无法从RGB 100%确定, 是强先验
+      - ch1: 已知节点位置 (确定的路网节点) — 区分已知/未知节点
 
     Args:
         known_graph_adj: dict, {(x,y): [(x1,y1), (x2,y2), ...]}
@@ -89,14 +87,12 @@ def render_graph_feature_map(known_graph_adj, patch_x0, patch_y0, patch_size):
         patch_size: patch 大小
 
     Returns:
-        feature_map: [patch_size, patch_size, 4]
+        feature_map: [patch_size, patch_size, 2]
     """
     H = W = patch_size
-    feature_map = np.zeros((H, W, 4), dtype=np.float32)
+    feature_map = np.zeros((H, W, 2), dtype=np.float32)
 
     if len(known_graph_adj) == 0:
-        # 空图: 距离场全部为 max
-        feature_map[:, :, 1] = 1.0
         return feature_map
 
     # 提取所有边和节点
@@ -109,57 +105,89 @@ def render_graph_feature_map(known_graph_adj, patch_x0, patch_y0, patch_size):
             all_nodes.add(neighbor)
 
     # ---- 通道 0: 已知道路 Mask ----
+    mask_ch = np.ascontiguousarray(feature_map[:, :, 0])
     for (src, tgt) in edges:
         p0 = (int(src[0] - patch_x0), int(src[1] - patch_y0))
         p1 = (int(tgt[0] - patch_x0), int(tgt[1] - patch_y0))
-        cv2.line(feature_map[:, :, 0], p0, p1, 1.0, thickness=2)
+        cv2.line(mask_ch, p0, p1, 1.0, thickness=2)
+    feature_map[:, :, 0] = mask_ch
 
-    # ---- 通道 1: 距离场 ----
-    road_binary = (feature_map[:, :, 0] > 0).astype(np.uint8)
-    if road_binary.max() > 0:
-        feature_map[:, :, 1] = cv2.distanceTransform(
-            1 - road_binary, cv2.DIST_L2, 5
-        ) / 64.0  # 归一化, 64px 外 ≈ 1.0
-    else:
-        feature_map[:, :, 1] = 1.0
-
-    # ---- 通道 2: 方向场 ----
-    # 在道路像素上赋值为该边的方向, 非道路像素保持0
-    for (src, tgt) in edges:
-        p0 = (int(src[0] - patch_x0), int(src[1] - patch_y0))
-        p1 = (int(tgt[0] - patch_x0), int(tgt[1] - patch_y0))
-        angle = math.atan2(tgt[1] - src[1], tgt[0] - src[0])  # [-pi, pi]
-        angle_norm = (angle / math.pi + 1.0) / 2.0  # 归一化到 [0, 1]
-        cv2.line(feature_map[:, :, 2], p0, p1, angle_norm, thickness=3)
-
-    # ---- 通道 3: 已知节点位置 ----
+    # ---- 通道 1: 已知节点位置 ----
+    node_ch = np.ascontiguousarray(feature_map[:, :, 1])
     for node in all_nodes:
         px = int(node[0] - patch_x0)
         py = int(node[1] - patch_y0)
         if 0 <= px < W and 0 <= py < H:
-            cv2.circle(feature_map[:, :, 3], (px, py), 3, 1.0, -1)
+            cv2.circle(node_ch, (px, py), 3, 1.0, -1)
+    feature_map[:, :, 1] = node_ch
 
     return feature_map
+
+
+def map_known_edges_to_nms(known_edge_set_subdivide, nmsed_indices, patch_x0, patch_y0,
+                           subdivide_points, nms_keypoints, distance_threshold=8.0):
+    """
+    将已知路网在 subdivided 图上的边映射到 NMS 后的节点索引
+
+    这是训练时的 known_edge_index 构造核心逻辑:
+    1. 从 known_edge_set_subdivide 获取已知边的 (src_sub_idx, tgt_sub_idx)
+    2. 检查 src/tgt 是否都在当前 patch 的 nmsed_indices 中
+    3. 如果是, 找到它们在 nmsed_indices 中的位置 (即 NMS 后的索引)
+    4. 构造 known_edge_index [2, E]
+
+    Args:
+        known_edge_set_subdivide: set of (src, tgt) 在 subdivided 图上的边
+        nmsed_indices: np.array, 当前 patch NMS 后节点在 subdivided 图中的索引
+        patch_x0, patch_y0: patch 左上角坐标
+        subdivide_points: subdivided 图所有节点坐标
+        nms_keypoints: NMS 后节点的坐标 (已减去 patch_x0/y0)
+        distance_threshold: 最近邻匹配阈值
+
+    Returns:
+        known_edge_index: [2, E] tensor
+    """
+    if len(nmsed_indices) == 0 or len(known_edge_set_subdivide) == 0:
+        return torch.zeros(2, 0, dtype=torch.long)
+
+    # 建立 subdivide_idx → nms_idx 的映射
+    sub_to_nms = {}
+    for nms_idx, sub_idx in enumerate(nmsed_indices):
+        sub_to_nms[sub_idx] = nms_idx
+
+    edges_src = []
+    edges_tgt = []
+    for (s, t) in known_edge_set_subdivide:
+        if s in sub_to_nms and t in sub_to_nms:
+            edges_src.append(sub_to_nms[s])
+            edges_tgt.append(sub_to_nms[t])
+
+    if len(edges_src) == 0:
+        return torch.zeros(2, 0, dtype=torch.long)
+
+    return torch.tensor([edges_src, edges_tgt], dtype=torch.long)
 
 
 class CompletionGraphLabelGenerator:
     """
     路网补全的图标签生成器
 
-    与原版 GraphLabelGenerator 的差异:
-      - 随机删除部分边构造已知图
-      - 已知已有边的候选对标记为 valid=False (不计入 topo loss)
-      - 额外返回已知图的边索引 (用于 GNN)
-      - 渲染已知路网的几何特征图
+    v2 变更:
+      - 动态 keep_ratio: 每次 refresh 时随机 U[0.2, 0.8]
+      - 保存原始图级别的已知边 (known_edges_original), 确保特征图渲染一致性
+      - sample_patch 返回 known_edge_index (映射到 NMS 节点索引)
     """
 
-    def __init__(self, config, full_graph, coord_transform, keep_ratio=0.5):
+    def __init__(self, config, full_graph, coord_transform, keep_ratio_range=(0.2, 0.8)):
         self.config = config
-        self.keep_ratio = keep_ratio
+        self.keep_ratio_range = keep_ratio_range
+        self.current_keep_ratio = random.uniform(*keep_ratio_range)
 
         # 完整图 (igraph)
         self.full_graph_origin = graph_utils.igraph_from_adj_dict(full_graph, coord_transform)
         self.crossover_points = graph_utils.find_crossover_points(self.full_graph_origin)
+
+        # 原始图的邻接表 (用于渲染 road_feature_map)
+        self.full_graph_adj_original = full_graph
 
         # 子图 (与原版相同)
         self.subdivide_resolution = 4
@@ -208,36 +236,76 @@ class CompletionGraphLabelGenerator:
         self.sample_weights[list(interesting_indices)] = 0.9
 
         # ---- 补全任务专用: 构造已知图 ----
-        self.known_graph_subdivide = None
         self.known_edge_set_subdivide = set()
+        self.known_edges_original = set()  # 原始图级别的已知边, 用于渲染
         self._create_known_graph()
 
     def _create_known_graph(self):
-        """随机删除部分边, 构造已知图"""
-        all_edges = [e.tuple for e in self.full_graph_subdivide.es]
-        keep_num = int(len(all_edges) * self.keep_ratio)
-        kept_edges = random.sample(all_edges, min(keep_num, len(all_edges)))
+        """
+        随机删除部分边, 构造已知图
 
-        # 构造已知边集合 (用于标记哪些候选边已经在已知图中)
+        同时保存 subdivided 图和原始图两个级别的已知边集合, 确保渲染和标签一致
+        """
+        self.current_keep_ratio = random.uniform(*self.keep_ratio_range)
+
+        # ---- Subdivided 图级别的删边 ----
+        all_edges_sub = [e.tuple for e in self.full_graph_subdivide.es]
+        keep_num_sub = int(len(all_edges_sub) * self.current_keep_ratio)
+        kept_edges_sub = random.sample(all_edges_sub, min(keep_num_sub, len(all_edges_sub)))
+
         self.known_edge_set_subdivide = set()
-        for src, tgt in kept_edges:
+        for src, tgt in kept_edges_sub:
             self.known_edge_set_subdivide.add((min(src, tgt), max(src, tgt)))
+
+        # ---- 原始图级别的删边 (用于渲染 road_feature_map) ----
+        # 收集原始图的所有边
+        all_edges_orig = []
+        for node, neighbors in self.full_graph_adj_original.items():
+            for neighbor in neighbors:
+                edge = (min(node, neighbor), max(node, neighbor))
+                all_edges_orig.append(edge)
+        all_edges_orig = list(set(all_edges_orig))
+
+        keep_num_orig = int(len(all_edges_orig) * self.current_keep_ratio)
+        kept_edges_orig = random.sample(all_edges_orig, min(keep_num_orig, len(all_edges_orig)))
+
+        self.known_edges_original = set(kept_edges_orig)
 
     def refresh_known_graph(self):
         """每个 epoch 调用, 重新随机删边"""
         self._create_known_graph()
 
+    def get_known_adj_for_render(self):
+        """
+        从已知边集合构造邻接表 (用于渲染 road_feature_map)
+
+        Returns:
+            known_adj: dict, {(x,y): [(x1,y1), ...]}
+        """
+        full_adj = self.full_graph_adj_original
+        known_adj = {}
+        for node, neighbors in full_adj.items():
+            for neighbor in neighbors:
+                edge = (min(node, neighbor), max(node, neighbor))
+                if edge in self.known_edges_original:
+                    if node not in known_adj:
+                        known_adj[node] = []
+                    known_adj[node].append(neighbor)
+        return known_adj
+
     def sample_patch(self, patch, rot_index=0):
         """
         采样 patch 的图标签
 
-        与原版的主要差异:
+        v2 变更:
           - 已知已有边的候选对标记为 valid=False (不参与 topo loss)
           - 标签仍基于完整图的 BFS (目标: 预测完整路网)
+          - 额外返回 known_edge_index (映射到 NMS 节点索引)
 
         Returns:
             nmsed_points: [N_nms, 2]
             samples: list of (pairs, shall_connect, valid)
+            known_edge_index: [2, E] tensor, 已知路网在 NMS 节点中的边
         """
         (x0, y0), (x1, y1) = patch
         query_box = (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
@@ -254,7 +322,7 @@ class CompletionGraphLabelGenerator:
                  [False] * max_nbr_queries,
                  [False] * max_nbr_queries)
             )
-            return fake_points, [fake_sample] * sample_num
+            return fake_points, [fake_sample] * sample_num, torch.zeros(2, 0, dtype=torch.long)
 
         patch_points = self.subdivide_points[patch_indices, :]
 
@@ -268,6 +336,12 @@ class CompletionGraphLabelGenerator:
         )
         nmsed_indices = patch_indices[kept_indices]
         nmsed_point_num = nmsed_points.shape[0]
+
+        # ---- 构造 known_edge_index (映射到 NMS 节点索引) ----
+        known_edge_index = map_known_edges_to_nms(
+            self.known_edge_set_subdivide, nmsed_indices,
+            x0, y0, self.subdivide_points, nmsed_points
+        )
 
         sample_num = self.config.TOPO_SAMPLE_NUM
         sample_weights = self.sample_weights[nmsed_indices]
@@ -315,12 +389,10 @@ class CompletionGraphLabelGenerator:
 
                 if is_known_edge:
                     # 已知边: 不参与 topo loss
-                    # shall_connect 不重要 (因为 valid=False)
                     shall_connect.append(False)
                     valid_list.append(False)
                 else:
                     # 未知边: 正常计算
-                    # BFS 判断在完整图中是否连通
                     shall_connect.append(target_graph_idx in reached_nodes)
                     valid_list.append(True)
 
@@ -354,11 +426,11 @@ class CompletionGraphLabelGenerator:
         noise_scale = 1.0
         nmsed_points += np.random.normal(0.0, noise_scale, size=nmsed_points.shape)
 
-        return nmsed_points, samples
+        return nmsed_points, samples, known_edge_index
 
 
 def completion_graph_collate_fn(batch):
-    """补全数据集的 collate 函数, 额外处理 road_feature_map 和 known_edge_index"""
+    """补全数据集的 collate 函数, 处理 graph_points, known_edge_index, traj_heatmap 等"""
     keys = batch[0].keys()
     collated = {}
     for key in keys:
@@ -372,19 +444,20 @@ def completion_graph_collate_fn(batch):
                 padded.append(padded_x)
             collated[key] = torch.stack(padded, dim=0)
         elif key == 'known_edge_index':
-            # edge_index 需要按最大边数 padding
+            # edge_index [2, E] 需要按最大边数 padding
+            # 用 -1 填充无效边 (GNN 中 valid_edge 检查会过滤 src < 0 的边)
             tensors = [item[key] for item in batch]
-            if tensors[0].shape[1] > 0:
-                max_edge_num = max([x.shape[1] for x in tensors])
+            max_edge_num = max([x.shape[1] for x in tensors]) if any(x.shape[1] > 0 for x in tensors) else 0
+            if max_edge_num > 0:
                 padded = []
                 for x in tensors:
-                    pad_num = max_edge_num - x.shape[1]
-                    if pad_num > 0:
-                        padded_x = torch.concat([x, torch.zeros(2, pad_num, dtype=torch.long)], dim=1)
+                    if x.shape[1] < max_edge_num:
+                        pad_num = max_edge_num - x.shape[1]
+                        padded_x = torch.concat([x, torch.full((2, pad_num), -1, dtype=torch.long)], dim=1)
                     else:
                         padded_x = x
                     padded.append(padded_x)
-                collated[key] = torch.stack(padded, dim=0)
+                collated[key] = torch.stack(padded, dim=0)  # [B, 2, max_E]
             else:
                 # 空 edge_index
                 collated[key] = torch.zeros(len(batch), 2, 0, dtype=torch.long)
@@ -395,19 +468,26 @@ def completion_graph_collate_fn(batch):
 
 class SatMapCompletionDataset(Dataset):
     """
-    路网补全数据集
+    路网补全数据集 v2
 
-    与原版 SatMapDataset 的差异:
-      1. 从完整 GT 图随机删除边构造已知图
-      2. 渲染已知路网的4通道几何特征图
-      3. 返回 known_edge_index (已知路网的边索引, 用于 GNN)
-      4. 已知边的候选对 valid=False (不参与 topo loss)
+    v2 变更:
+      1. road_feature_map: 2通道 (mask + 节点位置)
+      2. 动态 keep_ratio: 每次 refresh 随机 U[0.2, 0.8]
+      3. 支持 traj_heatmap: Xian 加载 active.png, 其他返回全零
+      4. known_edge_index: 正确映射到 NMS 节点索引
+      5. 特征图一致性: 渲染和标签使用同一组删边
+      6. 模态 Dropout: 20%清空所有先验
     """
 
     def __init__(self, config, is_train, dev_run=False):
         self.config = config
         self.is_train = is_train
-        self.keep_ratio = getattr(config, 'KEEP_RATIO', 0.5)
+        self.keep_ratio_range = (
+            getattr(config, 'KEEP_RATIO_MIN', 0.2),
+            getattr(config, 'KEEP_RATIO_MAX', 0.8),
+        )
+        self.modality_dropout_prob = getattr(config, 'MODALITY_DROPOUT_PROB', 0.2)
+        self.traj_dropout_prob = getattr(config, 'TRAJ_DROPOUT_PROB', 0.2)
 
         assert self.config.DATASET in {'cityscale', 'spacenet', 'didi'}
 
@@ -418,6 +498,8 @@ class SatMapCompletionDataset(Dataset):
             keypoint_mask_pattern = './datasets/cityscale/processed/keypoint_mask_{}.png'
             road_mask_pattern = './datasets/cityscale/processed/road_mask_{}.png'
             gt_graph_pattern = './datasets/cityscale/20cities/region_{}_refine_gt_graph.p'
+            # CityScale 无 traj
+            active_mask_pattern = None
             train, val, test = cityscale_data_partition()
             coord_transform = lambda v: v[:, ::-1]
 
@@ -428,6 +510,8 @@ class SatMapCompletionDataset(Dataset):
             keypoint_mask_pattern = './datasets/spacenet/processed/keypoint_mask_{}.png'
             road_mask_pattern = './datasets/spacenet/processed/road_mask_{}.png'
             gt_graph_pattern = './datasets/spacenet/RGB_1.0_meter/{}__gt_graph.p'
+            # SpaceNet 无 traj
+            active_mask_pattern = None
             train, val, test = spacenet_data_partition()
             coord_transform = lambda v: np.stack([v[:, 1], 400 - v[:, 0]], axis=1)
 
@@ -438,6 +522,8 @@ class SatMapCompletionDataset(Dataset):
             keypoint_mask_pattern = './xian/2019_400/processed/keypoint_mask_{}.png'
             road_mask_pattern = './xian/2019_400/processed/road_mask_{}.png'
             gt_graph_pattern = './xian/2019_400/region_{}_refine_gt_graph.p'
+            # Xian 有 traj: active.png 作为热力图
+            active_mask_pattern = './xian/2019_400/xian_2019_400/region_{}_active.png'
             train, val, test = didi_data_partition()
             coord_transform = lambda v: v[:, ::-1]
 
@@ -448,8 +534,10 @@ class SatMapCompletionDataset(Dataset):
 
         # 存储数据
         self.rgbs, self.keypoint_masks, self.road_masks = [], [], []
-        self.gt_graph_adjs = []  # 保存完整 GT 图, 用于每个 epoch 重新删边
+        self.gt_graph_adjs = []  # 保存完整 GT 图
         self.graph_label_generators = []
+        self.active_masks = []  # traj 热力图 (Xian 有, 其他为 None)
+        self.has_traj = []  # 每个 tile 是否有 traj
 
         if dev_run:
             tile_indices = tile_indices[:4]
@@ -472,9 +560,24 @@ class SatMapCompletionDataset(Dataset):
             self.gt_graph_adjs.append(gt_graph_adj)
 
             graph_label_generator = CompletionGraphLabelGenerator(
-                config, gt_graph_adj, coord_transform, keep_ratio=self.keep_ratio
+                config, gt_graph_adj, coord_transform,
+                keep_ratio_range=self.keep_ratio_range
             )
             self.graph_label_generators.append(graph_label_generator)
+
+            # 加载 traj 热力图 (仅 Xian)
+            if active_mask_pattern is not None:
+                active_mask_path = active_mask_pattern.format(tile_idx)
+                active_img = cv2.imread(active_mask_path, cv2.IMREAD_GRAYSCALE)
+                if active_img is not None:
+                    self.active_masks.append(active_img)
+                    self.has_traj.append(True)
+                else:
+                    self.active_masks.append(None)
+                    self.has_traj.append(False)
+            else:
+                self.active_masks.append(None)
+                self.has_traj.append(False)
 
         self.sample_min = self.SAMPLE_MARGIN
         self.sample_max = self.IMAGE_SIZE - (self.config.PATCH_SIZE + self.SAMPLE_MARGIN)
@@ -484,7 +587,7 @@ class SatMapCompletionDataset(Dataset):
                 (self.IMAGE_SIZE - 2 * self.SAMPLE_MARGIN) / self.config.PATCH_SIZE
             )
             self.eval_patches = []
-            for i in range(len(tile_indices)):
+            for i in range(len(self.rgbs)):
                 self.eval_patches += get_patch_info_one_img(
                     i, self.IMAGE_SIZE, self.SAMPLE_MARGIN,
                     self.config.PATCH_SIZE, eval_patches_per_edge
@@ -522,6 +625,12 @@ class SatMapCompletionDataset(Dataset):
         keypoint_mask_patch = self.keypoint_masks[img_idx][begin_y:end_y, begin_x:end_x]
         road_mask_patch = self.road_masks[img_idx][begin_y:end_y, begin_x:end_x]
 
+        # ---- traj_heatmap (路径A) ----
+        if self.active_masks[img_idx] is not None:
+            traj_heatmap = self.active_masks[img_idx][begin_y:end_y, begin_x:end_x].astype(np.float32) / 255.0
+        else:
+            traj_heatmap = np.zeros((self.config.PATCH_SIZE, self.config.PATCH_SIZE), dtype=np.float32)
+
         # 数据增强: 旋转
         rot_index = 0
         if self.is_train:
@@ -529,103 +638,72 @@ class SatMapCompletionDataset(Dataset):
             rgb_patch = np.rot90(rgb_patch, rot_index, [0, 1]).copy()
             keypoint_mask_patch = np.rot90(keypoint_mask_patch, rot_index, [0, 1]).copy()
             road_mask_patch = np.rot90(road_mask_patch, rot_index, [0, 1]).copy()
+            traj_heatmap = np.rot90(traj_heatmap, rot_index, [0, 1]).copy()
 
-        # 采样图标签
+        # 采样图标签 (包含 known_edge_index)
         patch = ((begin_x, begin_y), (end_x, end_y))
-        graph_points, topo_samples = self.graph_label_generators[img_idx].sample_patch(
+        graph_points, topo_samples, known_edge_index = self.graph_label_generators[img_idx].sample_patch(
             patch, rot_index
         )
 
         pairs, connected, valid = zip(*topo_samples)
 
-        # ---- 渲染已知路网的几何特征图 ----
-        # 使用完整 GT 图构造已知图 (删边后的版本)
-        # 需要从 known_edge_set_subdivide 反推已知图的邻接表
-        known_graph_adj = self._get_known_graph_adj(img_idx)
+        # ---- 渲染已知路网的几何特征图 (2通道) ----
+        # 使用 gen.known_edges_original 确保一致性
+        known_graph_adj = self.graph_label_generators[img_idx].get_known_adj_for_render()
         road_feature_map = render_graph_feature_map(
             known_graph_adj, begin_x, begin_y, self.config.PATCH_SIZE
         )
         # 同步旋转
         if self.is_train and rot_index != 0:
-            for ch in range(4):
+            for ch in range(2):
                 road_feature_map[:, :, ch] = np.rot90(
                     road_feature_map[:, :, ch], rot_index, [0, 1]
                 ).copy()
 
-        # ---- 构造 known_edge_index (已知路网在 NMS 后节点中的边) ----
-        # 这里简化处理: 用 NMS 后的节点坐标, 在已知路网 mask 上判断
-        # 具体: 如果两个节点都在已知路网的 mask 上 (ch0 > 0), 且它们在原图中确实是已知边
-        # 注意: 由于 NMS 后节点坐标可能与原图节点有偏移,
-        #       精确匹配在 __getitem__ 中难以完成, 改为在 collate_fn 或模型中处理
-        # 这里返回一个占位的空 edge_index, 真正的 GNN 边在 batch 级别构造
-        known_edge_index = torch.zeros(2, 0, dtype=torch.long)
+        # ---- 模态 Dropout ----
+        drop_all = False
+        if self.is_train and random.random() < self.modality_dropout_prob:
+            # 20% 概率清空所有先验: 模型退化为纯 Extraction
+            road_feature_map = np.zeros_like(road_feature_map)
+            known_edge_index = torch.zeros(2, 0, dtype=torch.long)
+            traj_heatmap = np.zeros_like(traj_heatmap)
+            drop_all = True
+
+        # ---- traj 热力图增强 (路径A捷径缓解) ----
+        if self.is_train and not drop_all and self.has_traj[img_idx]:
+            rand_val = random.random()
+            if rand_val < self.traj_dropout_prob:
+                # 20% 概率: 全黑 (保持纯视觉能力)
+                traj_heatmap = np.zeros_like(traj_heatmap)
+            elif rand_val < 3 * self.traj_dropout_prob:
+                # 40% 概率: 腐蚀 (打断捷径)
+                traj_heatmap = traj_heatmap.copy()
+                h, w = traj_heatmap.shape
+                for _ in range(random.randint(3, 10)):
+                    erase_w = random.randint(16, 64)
+                    erase_h = random.randint(16, 64)
+                    ex = random.randint(0, max(1, w - erase_w))
+                    ey = random.randint(0, max(1, h - erase_h))
+                    traj_heatmap[ey:ey + erase_h, ex:ex + erase_w] = 0
+            # else: 40% 概率: 完整 traj (学习信任先验)
+
+        # 验证集: 清空 traj, 保持 road_feature_map 和 known_edge_index
+        if not self.is_train:
+            traj_heatmap = np.zeros_like(traj_heatmap)
+
+        # traj_heatmap: [H, W] → [H, W, 1]
+        traj_heatmap = traj_heatmap[:, :, np.newaxis]  # [H, W, 1]
 
         return {
-            'rgb': torch.tensor(rgb_patch, dtype=torch.float32),
+            'rgb': torch.tensor(rgb_patch, dtype=torch.float32),  # [H, W, 3]
+            'traj_heatmap': torch.tensor(traj_heatmap, dtype=torch.float32),  # [H, W, 1]
             'keypoint_mask': torch.tensor(keypoint_mask_patch, dtype=torch.float32) / 255.0,
             'road_mask': torch.tensor(road_mask_patch, dtype=torch.float32) / 255.0,
-            'road_feature_map': torch.tensor(road_feature_map, dtype=torch.float32).permute(2, 0, 1),  # [4, H, W]
+            'road_feature_map': torch.tensor(road_feature_map, dtype=torch.float32).permute(2, 0, 1),  # [2, H, W]
             'graph_points': torch.tensor(graph_points, dtype=torch.float32),
             'pairs': torch.tensor(pairs, dtype=torch.int32),
             'connected': torch.tensor(connected, dtype=torch.bool),
             'valid': torch.tensor(valid, dtype=torch.bool),
-            'known_edge_index': known_edge_index,
+            'known_edge_index': known_edge_index,  # [2, E]
         }
-
-    def _get_known_graph_adj(self, img_idx):
-        """
-        从删边后的已知图构造邻接表 (用于渲染特征图)
-
-        Returns:
-            known_adj: dict, {(x,y): [(x1,y1), ...]}
-        """
-        gen = self.graph_label_generators[img_idx]
-        full_adj = self.gt_graph_adjs[img_idx]
-
-        # 完整图的所有边
-        all_edges = []
-        for node, neighbors in full_adj.items():
-            for neighbor in neighbors:
-                edge = (min(node, neighbor), max(node, neighbor))
-                all_edges.append(edge)
-
-        # 去重
-        all_edges = list(set(all_edges))
-
-        # 在 subdivided 图的 known_edge_set 中检查
-        # 但 known_edge_set_subdivide 是 subdivided 图的边索引,
-        # 我们需要原始图的边
-        # 简化处理: 用 keep_ratio 随机保留原始图的边
-        # (由于 CompletionGraphLabelGenerator 已经做了删边,
-        #  这里用相同的 keep_ratio 重新采样, 保证一致性)
-
-        # 直接使用 full_adj, 让渲染用完整图 (训练时已知图 = 删边后的图)
-        # 这里我们需要从 subdivided 图的 known_edge_set 反推原始图的边
-        # 最简单的做法: 遍历原始图所有边, 检查端点在 subdivided 图中的边是否在 known_edge_set 中
-
-        # 更简单的做法: 直接用随机删边 (和 CompletionGraphLabelGenerator 使用同一个 random state)
-        # 由于两者独立随机, 可能不一致。这里接受这个近似, 因为:
-        # 1. 渲染特征图的目的是提供"已知路网的大致位置和方向"
-        # 2. 几个像素的偏差不会影响 CNN 编码的结果
-        # 3. 完全一致的删边需要在 GraphLabelGenerator 中同步保存原始图的边, 实现复杂
-
-        # 使用与 CompletionGraphLabelGenerator 相同 keep_ratio 的随机删边
-        random.seed(id(gen) + gen.known_edge_set_subdivide.__hash__())  # 用 gen 的状态作为 seed
-        kept_edges = set()
-        for edge in all_edges:
-            if random.random() < self.keep_ratio:
-                kept_edges.add(edge)
-
-        # 构造邻接表
-        known_adj = {}
-        for node, neighbors in full_adj.items():
-            known_adj[node] = []
-            for neighbor in neighbors:
-                edge = (min(node, neighbor), max(node, neighbor))
-                if edge in kept_edges:
-                    known_adj[node].append(neighbor)
-
-        # 清理空节点
-        known_adj = {k: v for k, v in known_adj.items() if len(v) > 0}
-
-        return known_adj

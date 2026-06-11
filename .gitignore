@@ -18,6 +18,7 @@ save
 
 # Training logs (generated at runtime)
 outputs/logs/train_*
+!outputs/logs/train_completion_spacenet_v2_20260611.txt
 wandb
 
 # Generated visualizations (except docs/imgs which are curated)

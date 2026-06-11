@@ -1,23 +1,30 @@
 """
-SAM-Road Completion Inference Script
-=====================================
+SAM-Road Completion v2 Inference Script
+==========================================
 路网补全推理脚本
+
+v2 变更:
+  - 支持 4ch 输入 (RGB + traj_heatmap)
+  - road_feature_map 2通道 (mask + 节点位置)
+  - known_edge_index 最近邻映射到 NMS 关键点
+  - 后处理: 已知图边强制 topo_score = 1.0
 
 输入:
   - 遥感影像
   - 已知路网 (pickle 格式邻接表)
+  - 可选: 轨迹热力图 (Xian active.png)
 输出:
   - 补全后的完整路网
-
-与原版 inferencer.py 的差异:
-  - 使用 SAMRoadCompletion 模型
-  - 加载已知路网, 渲染几何特征图
-  - TopoNet 推理时传入已知路网信息
-  - 已知路网的边直接保留, 只预测新增边
 """
 
 import numpy as np
 import os
+import sys
+# 确保项目根目录在 sys.path 中
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import torch
 import cv2
 import math
@@ -47,6 +54,8 @@ parser.add_argument("--input_graph", default=None,
                     help="path to the known graph pickle file (adj dict format)")
 parser.add_argument("--input_graph_dir", default=None,
                     help="directory of known graph pickle files, one per region")
+parser.add_argument("--traj_dir", default=None,
+                    help="directory of trajectory heatmap images (active.png), for Xian dataset")
 parser.add_argument("--device", default="cuda", help="device to use")
 args = parser.parse_args()
 
@@ -84,7 +93,25 @@ def load_known_graph(img_id, config):
         return None
 
 
-def infer_one_img(net, img, config, known_graph_adj=None):
+def load_traj_heatmap(img_id, config):
+    """加载轨迹热力图 (仅 Xian 数据集)"""
+    if args.traj_dir is None:
+        return None
+
+    if config.DATASET == 'didi':
+        traj_path = os.path.join(args.traj_dir, f'region_{img_id}_active.png')
+    else:
+        return None
+
+    if os.path.exists(traj_path):
+        traj_img = cv2.imread(traj_path, cv2.IMREAD_GRAYSCALE)
+        return traj_img.astype(np.float32) / 255.0
+    else:
+        print(f"Warning: traj heatmap not found at {traj_path}")
+        return None
+
+
+def infer_one_img(net, img, config, known_graph_adj=None, traj_heatmap_full=None):
     """
     推理单张影像
 
@@ -93,6 +120,7 @@ def infer_one_img(net, img, config, known_graph_adj=None):
         img: [H, W, 3] RGB 影像
         config: 配置
         known_graph_adj: dict, 已知路网邻接表 {(x,y): [(x1,y1), ...]}
+        traj_heatmap_full: [H, W] 轨迹热力图 (None 则用全零)
     """
     image_size = img.shape[0]
     batch_size = config.INFER_BATCH_SIZE
@@ -119,25 +147,38 @@ def infer_one_img(net, img, config, known_graph_adj=None):
         batch_patch_info = all_patch_info[offset: offset + batch_size]
         batch_img_patches = get_batch_img_patches(img, batch_patch_info)
 
-        # 为每个 patch 渲染已知路网特征图
+        # 为每个 patch 渲染已知路网特征图 (2通道)
         road_feature_maps = []
+        traj_heatmap_patches = []
         for _, (x0, y0), (x1, y1) in batch_patch_info:
             if known_graph_adj is not None:
                 rfm = render_graph_feature_map(
                     known_graph_adj, x0, y0, config.PATCH_SIZE
                 )
             else:
-                rfm = np.zeros((config.PATCH_SIZE, config.PATCH_SIZE, 4), dtype=np.float32)
-                rfm[:, :, 1] = 1.0  # 距离场: 全部为 max
+                rfm = np.zeros((config.PATCH_SIZE, config.PATCH_SIZE, 2), dtype=np.float32)
             road_feature_maps.append(
-                torch.tensor(rfm, dtype=torch.float32).permute(2, 0, 1)  # [4, H, W]
+                torch.tensor(rfm, dtype=torch.float32).permute(2, 0, 1)  # [2, H, W]
             )
+
+            # 轨迹热力图
+            if traj_heatmap_full is not None:
+                traj_patch = traj_heatmap_full[y0:y1, x0:x1]
+                traj_heatmap_patches.append(
+                    torch.tensor(traj_patch, dtype=torch.float32).unsqueeze(-1)  # [H, W, 1]
+                )
+            else:
+                traj_heatmap_patches.append(
+                    torch.zeros(config.PATCH_SIZE, config.PATCH_SIZE, 1, dtype=torch.float32)
+                )
+
         batch_road_features = torch.stack(road_feature_maps, 0).to(args.device)
+        batch_traj_heatmaps = torch.stack(traj_heatmap_patches, 0).to(args.device)
 
         with torch.no_grad():
             batch_img_patches = batch_img_patches.to(args.device)
             mask_scores, patch_fused_features = net.infer_masks_and_img_features(
-                batch_img_patches, batch_road_features
+                batch_img_patches, batch_traj_heatmaps, batch_road_features
             )
             img_features.append(patch_fused_features)
 
@@ -174,10 +215,18 @@ def infer_one_img(net, img, config, known_graph_adj=None):
     edge_counts = defaultdict(float)
 
     # 构造已知路网在全局节点中的边索引 (用于 GNN)
-    # 将已知路网节点匹配到 NMS 后的全局节点
+    # 使用最近邻映射将已知路网边映射到 NMS 关键点
     known_edge_index_global = _match_known_edges_to_graph_points(
         known_graph_adj, graph_points, config.NEIGHBOR_RADIUS
     )
+
+    # 收集已知路网在全局节点中的所有边 (用于后处理硬覆盖)
+    known_edges_set = set()
+    if known_graph_adj is not None and known_edge_index_global.shape[1] > 0:
+        for e in range(known_edge_index_global.shape[1]):
+            s = known_edge_index_global[0, e].item()
+            t = known_edge_index_global[1, e].item()
+            known_edges_set.add((min(s, t), max(s, t)))
 
     for batch_index in range(batch_num):
         offset = batch_index * batch_size
@@ -236,10 +285,9 @@ def infer_one_img(net, img, config, known_graph_adj=None):
 
         # 为每个 patch 构造 known_edge_index (在 patch 节点空间中)
         batch_known_edge_index = _build_batch_known_edge_index(
-            batch_patch_info, patch_point_indices_list=None,
+            batch_patch_info,
             graph_points=graph_points, graph_rtree=graph_rtree,
-            known_edge_index_global=known_edge_index_global,
-            idx_maps=idx_maps
+            known_edge_index_global=known_edge_index_global
         )
 
         with torch.no_grad():
@@ -270,6 +318,10 @@ def infer_one_img(net, img, config, known_graph_adj=None):
     pred_new_edges = []
     for edge, score_sum in edge_scores.items():
         score = score_sum / edge_counts[edge]
+        # 后处理: 已知图的边强制 topo_score = 1.0 (硬覆盖)
+        edge_key = (min(edge[0], edge[1]), max(edge[0], edge[1]))
+        if edge_key in known_edges_set:
+            score = 1.0
         if score > config.TOPO_THRESHOLD:
             pred_new_edges.append(edge)
     pred_new_edges = np.array(pred_new_edges).reshape(-1, 2)
@@ -310,7 +362,12 @@ def infer_one_img(net, img, config, known_graph_adj=None):
 
 def _match_known_edges_to_graph_points(known_graph_adj, graph_points, neighbor_radius):
     """
-    将已知路网的边匹配到 NMS 后的全局图节点
+    将已知路网的边匹配到 NMS 后的全局图节点 (最近邻映射)
+
+    Args:
+        known_graph_adj: dict, 已知路网邻接表
+        graph_points: [N, 2] NMS 后的关键点坐标
+        neighbor_radius: 最近邻匹配的最大距离阈值
 
     Returns:
         known_edge_index: [2, E] tensor, 已知路网在全局节点索引中的边
@@ -364,9 +421,8 @@ def _match_known_edges_to_graph_points(known_graph_adj, graph_points, neighbor_r
     return torch.tensor([edges_src, edges_tgt], dtype=torch.long)
 
 
-def _build_batch_known_edge_index(batch_patch_info, patch_point_indices_list,
-                                   graph_points, graph_rtree,
-                                   known_edge_index_global, idx_maps):
+def _build_batch_known_edge_index(batch_patch_info, graph_points, graph_rtree,
+                                   known_edge_index_global):
     """
     为 batch 中的每个 patch 构造 known_edge_index
 
@@ -469,9 +525,16 @@ if __name__ == "__main__":
         else:
             print(f'  No known graph provided, running full extraction mode')
 
+        # 加载轨迹热力图 (仅 Xian)
+        traj_heatmap = load_traj_heatmap(img_id, config)
+        if traj_heatmap is not None:
+            print(f'  Loaded traj heatmap')
+        else:
+            print(f'  No traj heatmap, using zeros')
+
         start_seconds = time.time()
         pred_nodes, pred_edges, itsc_mask, road_mask = infer_one_img(
-            net, img, config, known_graph_adj
+            net, img, config, known_graph_adj, traj_heatmap
         )
         end_seconds = time.time()
         total_inference_seconds += (end_seconds - start_seconds)
