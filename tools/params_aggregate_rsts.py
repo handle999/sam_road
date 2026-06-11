@@ -3,8 +3,8 @@ import csv
 import json
 
 # 配置文件路径
-PARAMS_CSV = 'experiments/param_exps.csv'
-RESULTS_CSV = 'experiments/param_rsts.csv'
+PARAMS_CSV = 'outputs/experiments/param_exps.csv'
+RESULTS_CSV = 'outputs/experiments/param_rsts.csv'
 SAVE_DIR = './save'
 
 def aggregate_results():

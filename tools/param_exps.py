@@ -3,7 +3,7 @@ import os
 import subprocess
 import time
 
-CSV_FILE = 'experiments/param_exps.csv'
+CSV_FILE = 'outputs/experiments/param_exps.csv'
 SAVE_DIR = './save'
 
 def run_experiments():

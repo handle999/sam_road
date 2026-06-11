@@ -7,14 +7,14 @@ import os
 import time
 
 # ================= 配置区域 =================
-# LOG_FILE_PATH = './train_logs/sam_road_xian_cityscale.txt'
-# SAVE_IMG_PATH = './train_logs/sam_road_xian_cityscale_live_loss.png'  # 图表保存路径
-# LOG_FILE_PATH = './train_logs/sam_road_cityscale.txt'
-# SAVE_IMG_PATH = './train_logs/sam_road_cityscale_live_loss.png'  # 图表保存路径
-LOG_FILE_PATH = './train_logs/sam_road_spacenet.txt'
-SAVE_IMG_PATH = './train_logs/sam_road_spacenet_live_loss.png'  # 图表保存路径
-# LOG_FILE_PATH = './train_logs/sam_road_spacenet_4c_update.txt'
-# SAVE_IMG_PATH = './train_logs/sam_road_spacenet_4c_update_live_loss.png'  # 图表保存路径
+# LOG_FILE_PATH = './outputs/logs/sam_road_xian_cityscale.txt'
+# SAVE_IMG_PATH = './outputs/logs/sam_road_xian_cityscale_live_loss.png'  # 图表保存路径
+# LOG_FILE_PATH = './outputs/logs/sam_road_cityscale.txt'
+# SAVE_IMG_PATH = './outputs/logs/sam_road_cityscale_live_loss.png'  # 图表保存路径
+LOG_FILE_PATH = './outputs/logs/sam_road_spacenet.txt'
+SAVE_IMG_PATH = './outputs/logs/sam_road_spacenet_live_loss.png'  # 图表保存路径
+# LOG_FILE_PATH = './outputs/logs/sam_road_spacenet_4c_update.txt'
+# SAVE_IMG_PATH = './outputs/logs/sam_road_spacenet_4c_update_live_loss.png'  # 图表保存路径
 UPDATE_INTERVAL = 10  # 每隔 10 秒刷新并保存一次图片
 # ============================================
 

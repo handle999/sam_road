@@ -108,21 +108,21 @@ python engine/inferencer_4ch.py --config=config/toponet_vitb_256_xian_cityscale.
 ```shell
 # City-scale dataset:  
 python engine/train.py --config=config/toponet_vitb_512_cityscale.yaml
-python engine/train.py --config=config/toponet_vitb_512_cityscale.yaml  --ckpt_path=./checkpoints/samroad_city 2>&1 | tee ./train_logs/sam_road_official_cityscale.txt
+python engine/train.py --config=config/toponet_vitb_512_cityscale.yaml  --ckpt_path=./checkpoints/samroad_city 2>&1 | tee ./outputs/logs/sam_road_official_cityscale.txt
 python -u engine/train.py --config=config/toponet_vitb_512_cityscale.yaml --ckpt_path=./checkpoints/samroad_city
 
 # SpaceNet dataset:  
 python engine/train.py --config=config/toponet_vitb_256_spacenet.yaml
-python engine/train.py --config=config/toponet_vitb_256_spacenet.yaml --ckpt_path=./checkpoints/samroad_spacenet 2>&1 | tee ./train_logs/sam_road_spacenet.txt
+python engine/train.py --config=config/toponet_vitb_256_spacenet.yaml --ckpt_path=./checkpoints/samroad_spacenet 2>&1 | tee ./outputs/logs/sam_road_spacenet.txt
 python -u engine/train.py --config=config/toponet_vitb_256_spacenet.yaml --ckpt_path=./checkpoints/samroad_spacenet
-python engine/train_4ch.py --config=config/toponet_vitb_256_spacenet.yaml --ckpt_path=./checkpoints/samroad_4c_update_spacenet 2>&1 | tee ./train_logs/sam_road_spacenet_4c_update.txt
+python engine/train_4ch.py --config=config/toponet_vitb_256_spacenet.yaml --ckpt_path=./checkpoints/samroad_4c_update_spacenet 2>&1 | tee ./outputs/logs/sam_road_spacenet_4c_update.txt
 
-CUDA_VISIBLE_DEVICES=7 python engine/train.py --config=config/toponet_vitb_512_cityscale.yaml 2>&1 | tee ./train_logs/sam_road_official_cityscale.txt
+CUDA_VISIBLE_DEVICES=7 python engine/train.py --config=config/toponet_vitb_512_cityscale.yaml 2>&1 | tee ./outputs/logs/sam_road_official_cityscale.txt
 
-CUDA_VISIBLE_DEVICES=6 python engine/train.py --config=config/toponet_vitb_256_spacenet.yaml 2>&1 | tee ./train_logs/sam_road_official_spacenet.txt
+CUDA_VISIBLE_DEVICES=6 python engine/train.py --config=config/toponet_vitb_256_spacenet.yaml 2>&1 | tee ./outputs/logs/sam_road_official_spacenet.txt
 
 # xian dataset
-CUDA_VISIBLE_DEVICES=7 python engine/train.py --config=config/toponet_vitb_256_xian_cityscale.yaml 2>&1 | tee ./train_logs/sam_road_xian_cityscale.txt
+CUDA_VISIBLE_DEVICES=7 python engine/train.py --config=config/toponet_vitb_256_xian_cityscale.yaml 2>&1 | tee ./outputs/logs/sam_road_xian_cityscale.txt
 ```
 
 

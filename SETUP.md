@@ -4,7 +4,7 @@
 
 但是有一个问题，如果用yml，服务器的官方pip会卡死，所以应当使用清华源
 
-因此使用conda和pip分开的安装，一个是`env/conda_only.yml`，一个是`env/pip_requirements.txt`，分别来自于
+因此使用conda和pip分开的安装，一个是`conda_only.yml`，一个是`pip_requirements.txt`，分别来自于
 
 ```shell
 conda env export --from-history > conda_only.yml
@@ -82,5 +82,5 @@ pip install torch-geometric==2.4.0
 最后还原req文件，再执行一遍就行
 
 ```shell
-pip install -r env/pip_requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install -r pip_requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
