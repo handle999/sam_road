@@ -702,9 +702,12 @@ class SAMRoadCompletion(pl.LightningModule):
 
         topo_gt = batch['connected'].to(torch.int32)
         topo_loss_mask = valid.to(torch.float32)
-        topo_loss = self.topo_criterion(topo_logits, topo_gt.unsqueeze(-1).to(torch.float32))
+        # clamp logits 防止 fp16 BCE 溢出 (|x|>16 时 sigmoid 趋近 0/1, loss 梯度爆炸)
+        topo_logits_safe = topo_logits.clamp(-16, 16)
+        topo_loss = self.topo_criterion(topo_logits_safe, topo_gt.unsqueeze(-1).to(torch.float32))
         topo_loss *= topo_loss_mask.unsqueeze(-1)
-        topo_loss = topo_loss.sum() / topo_loss_mask.sum()
+        n_valid = topo_loss_mask.sum()
+        topo_loss = topo_loss.sum() / (n_valid + 1e-8)  # epsilon 防止零除 NaN
 
         loss = mask_loss + topo_loss
         self.log('train_mask_loss', mask_loss, on_step=True, on_epoch=False, prog_bar=True)
@@ -730,9 +733,12 @@ class SAMRoadCompletion(pl.LightningModule):
 
         topo_gt = batch['connected'].to(torch.int32)
         topo_loss_mask = valid.to(torch.float32)
-        topo_loss = self.topo_criterion(topo_logits, topo_gt.unsqueeze(-1).to(torch.float32))
+        # clamp logits 防止 fp16 BCE 溢出
+        topo_logits_safe = topo_logits.clamp(-16, 16)
+        topo_loss = self.topo_criterion(topo_logits_safe, topo_gt.unsqueeze(-1).to(torch.float32))
         topo_loss *= topo_loss_mask.unsqueeze(-1)
-        topo_loss = topo_loss.sum() / topo_loss_mask.sum()
+        n_valid = topo_loss_mask.sum()
+        topo_loss = topo_loss.sum() / (n_valid + 1e-8)  # epsilon 防止零除 NaN
 
         loss = mask_loss + topo_loss
         self.log('val_mask_loss', mask_loss, on_step=False, on_epoch=True, prog_bar=True)
