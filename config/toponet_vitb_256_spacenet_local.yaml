@@ -21,19 +21,19 @@ USE_SAM_DECODER: False
 TOPO_SAMPLE_NUM: 128
 TOPONET_VERSION: 'normal'
 
-# Completion-specific
-GRAPH_DIM: 32                # GNN 图拓扑嵌入维度
-KEEP_RATIO_MIN: 0.2          # 动态 keep_ratio 下限
-KEEP_RATIO_MAX: 0.8          # 动态 keep_ratio 上限
-MODALITY_DROPOUT_PROB: 0.2   # 全部先验清空概率 (模型退化为 Extraction)
-TRAJ_DROPOUT_PROB: 0.2       # traj 热力图增强中的 dropout/腐蚀概率
-
 # Inference
-INFER_BATCH_SIZE: 32
+INFER_BATCH_SIZE: 16      # 同 BATCH_SIZE
 SAMPLE_MARGIN: 0
 INFER_PATCHES_PER_EDGE: 16
 
-# Thresholds
+# ======= keypoint ======
+# Best threshold 0.1949462890625, P=0.34380707144737244 R=0.326823890209198 F1=0.3351004719734192
+# ======= road ======
+# Best threshold 0.3408203125, P=0.6585257053375244 R=0.7146456837654114 F1=0.6854389309883118
+# ======= topo ======
+# Best threshold 0.705078125, P=0.9746968150138855 R=0.9701263904571533 F1=0.9724062085151672
+
+# ======= Best thresholds (from original config) =======
 ITSC_THRESHOLD: 0.195
 ROAD_THRESHOLD: 0.341
 TOPO_THRESHOLD: 0.705
