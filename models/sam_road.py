@@ -17,7 +17,7 @@ from sam.segment_anything.modeling.prompt_encoder import PromptEncoder
 from sam.segment_anything.modeling.transformer import TwoWayTransformer
 from sam.segment_anything.modeling.common import LayerNorm2d
 
-import wandb
+# wandb removed - use CSVLogger instead
 import pprint
 import torchvision
 
@@ -567,8 +567,8 @@ class SAMRoad(pl.LightningModule):
         self.log('val_topo_loss', topo_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
 
-        # Log images
-        if batch_idx == 0:
+        # Log images (skip if logger doesn't support log_table, e.g. CSVLogger)
+        if batch_idx == 0 and hasattr(self.logger, 'log_table'):
             max_viz_num = 4
             viz_rgb = rgb[:max_viz_num, :, :]
             viz_pred_keypoint = mask_scores[:max_viz_num, :, :, 0]
@@ -577,8 +577,12 @@ class SAMRoad(pl.LightningModule):
             viz_gt_road = road_mask[:max_viz_num, ...]
             
             columns = ['rgb', 'gt_keypoint', 'gt_road', 'pred_keypoint', 'pred_road']
-            data = [[wandb.Image(x.cpu().numpy()) for x in row] for row in list(zip(viz_rgb, viz_gt_keypoint, viz_gt_road, viz_pred_keypoint, viz_pred_road))]
-            self.logger.log_table(key='viz_table', columns=columns, data=data)
+            try:
+                import wandb as _wandb
+                data = [[_wandb.Image(x.cpu().numpy()) for x in row] for row in list(zip(viz_rgb, viz_gt_keypoint, viz_gt_road, viz_pred_keypoint, viz_pred_road))]
+                self.logger.log_table(key='viz_table', columns=columns, data=data)
+            except ImportError:
+                pass  # wandb not installed, skip image logging
 
         self.keypoint_iou.update(mask_scores[..., 0], keypoint_mask)
         self.road_iou.update(mask_scores[..., 1], road_mask)
