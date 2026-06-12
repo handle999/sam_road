@@ -1,4 +1,11 @@
 from argparse import ArgumentParser
+import os
+import sys
+# 确保项目根目录在 sys.path 中
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -8,7 +15,6 @@ from tools.config_utils import load_config
 from data.dataset import SatMapDataset, graph_collate_fn
 from models.sam_road import SAMRoad
 
-import os
 from datetime import datetime
 
 import lightning.pytorch as pl
@@ -36,6 +42,10 @@ parser.add_argument(
 )
 parser.add_argument(
     "--dev_run", default=False, action='store_true'
+)
+parser.add_argument(
+    "--gpus", default="0", type=str,
+    help="GPU id(s) to use, e.g. '0' or '0,1'"
 )
 
 
@@ -70,7 +80,7 @@ if __name__ == "__main__":
     checkpoint_callback = ModelCheckpoint(
         dirpath="checkpoints/samroad_spacenet/",
         every_n_epochs=1, 
-        save_top_k=3, monitor="val_loss", mode="min"
+        save_top_k=5, monitor="val_loss", mode="min"
     )
     lr_monitor = LearningRateMonitor(logging_interval='step')
     log_dir = "train_logs"
@@ -84,6 +94,8 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         max_epochs=config.TRAIN_EPOCHS,
+        accelerator="gpu",
+        devices=[int(g) for g in args.gpus.split(',')],
         check_val_every_n_epoch=1,
         num_sanity_val_steps=2,
         callbacks=callbacks,
