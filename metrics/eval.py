@@ -110,7 +110,7 @@ def eval_apls(dataset, target_dir, workers=None):
 
             res_go = subprocess.run(
                 [abs_go_bin, f"../{temp_gt}", f"../{temp_prop}", out_txt, dataset],
-                cwd=appls_dir, capture_output=True, text=True
+                cwd=apls_dir, capture_output=True, text=True
             )
             if res_go.returncode != 0:
                 return f"Go Execution Error ({name}): {res_go.stderr}"
