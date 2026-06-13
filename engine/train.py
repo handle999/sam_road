@@ -77,11 +77,17 @@ if __name__ == "__main__":
         collate_fn=graph_collate_fn,
     )
 
+    # ---- Checkpoint: 保存 val_loss 最小的 top-5 ----
     checkpoint_callback = ModelCheckpoint(
         dirpath="checkpoints/samroad_spacenet/",
-        every_n_epochs=1, 
-        save_top_k=5, monitor="val_loss", mode="min"
+        filename="epoch-{epoch:02d}-{val_loss:.4f}",
+        monitor="val_loss",
+        every_n_epochs=1,
+        mode="min",
+        save_top_k=5,
+        save_last=True,  # 额外保存最后一个 epoch
     )
+
     lr_monitor = LearningRateMonitor(logging_interval='step')
     log_dir = "train_logs"
     os.makedirs(log_dir, exist_ok=True)
