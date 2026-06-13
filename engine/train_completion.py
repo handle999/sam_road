@@ -99,6 +99,7 @@ if __name__ == "__main__":
         dirpath="checkpoints/samroad_completion/",
         filename="completion-{epoch:02d}-{val_loss:.4f}",
         monitor="val_loss",
+        every_n_epochs=1,
         mode="min",
         save_top_k=5,
         save_last=True,  # 额外保存最后一个 epoch
@@ -137,6 +138,8 @@ if __name__ == "__main__":
         logger=csv_logger,
         fast_dev_run=args.fast_dev_run,
         precision=args.precision,
+        gradient_clip_val=1.0,            # NaN 修复: 梯度范数裁剪到 1.0
+        gradient_clip_algorithm="norm",   # 整体 rescale, 不是逐分量截断
     )
 
     trainer.fit(net, train_dataloaders=train_loader, val_dataloaders=val_loader, ckpt_path=args.resume)

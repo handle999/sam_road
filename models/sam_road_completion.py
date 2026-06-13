@@ -237,8 +237,11 @@ class RoadGraphGNN(nn.Module):
             adj_mask = self._build_adj_mask(edge_index, B, N, node_coords.device)
             # 转换为 attn_mask 格式: float, 0=可以注意, -inf=屏蔽
             # PyTorch MHA 的 attn_mask 3D 格式: (B*num_heads, L, S)
+            # NaN 修复: fp16 下用 -inf 会触发 inf-inf=NaN, 改用大负有限值
+            # softmax(x + (-1e4)) 在 fp16/fp32 下都 underflow 到 0, 与 -inf 等价
+            neg_large = -1e4 if x.dtype == torch.float16 else float('-inf')
             attn_mask = torch.zeros(B, N, N, device=node_coords.device, dtype=x.dtype)
-            attn_mask = attn_mask.masked_fill(~adj_mask, float('-inf'))
+            attn_mask = attn_mask.masked_fill(~adj_mask, neg_large)
             # 扩展到 num_heads: [B, N, N] -> [B*num_heads, N, N]
             attn_mask = attn_mask.repeat_interleave(self.gat_layers[0].num_heads, dim=0)
         else:
@@ -602,6 +605,11 @@ class SAMRoadCompletion(pl.LightningModule):
             graph_embeddings = self.road_graph_gnn(
                 point_features, graph_points, known_edge_index
             )  # [B, N, graph_dim]
+            # NaN 修复: GNN 内部的 MHA 在 fp16 下偶尔产生 NaN, 在源头拍回有限值,
+            # 避免 NaN 经 topo_net 传到下游 BCE 和反向传播
+            graph_embeddings = torch.nan_to_num(
+                graph_embeddings, nan=0.0, posinf=1e4, neginf=-1e4
+            )
         else:
             graph_embeddings = None
 
@@ -698,22 +706,54 @@ class SAMRoadCompletion(pl.LightningModule):
         )
 
         gt_masks = torch.stack([keypoint_mask, road_mask], dim=3)
-        mask_loss = self.mask_criterion(mask_logits, gt_masks)
+        # NaN 修复: mask_logits 也兜底, 否则 RoadGraphGNN/SAM encoder 一旦中毒,
+        # mask BCE 也会 NaN 并继续污染下游
+        mask_logits_safe = torch.nan_to_num(
+            mask_logits, nan=0.0, posinf=16.0, neginf=-16.0
+        ).clamp(-16, 16)
+        mask_loss = self.mask_criterion(mask_logits_safe, gt_masks)
 
         topo_gt = batch['connected'].to(torch.int32)
         topo_loss_mask = valid.to(torch.float32)
-        # clamp logits 防止 fp16 BCE 溢出 (|x|>16 时 sigmoid 趋近 0/1, loss 梯度爆炸)
-        topo_logits_safe = topo_logits.clamp(-16, 16)
-        topo_loss = self.topo_criterion(topo_logits_safe, topo_gt.unsqueeze(-1).to(torch.float32))
-        topo_loss *= topo_loss_mask.unsqueeze(-1)
-        n_valid = topo_loss_mask.sum()
-        topo_loss = topo_loss.sum() / (n_valid + 1e-8)  # epsilon 防止零除 NaN
+        # NaN 修复: nan_to_num 兜底 + 布尔掩码 gather (避免 0*NaN=NaN 传播)
+        topo_logits_safe = torch.nan_to_num(
+            topo_logits, nan=0.0, posinf=16.0, neginf=-16.0
+        ).clamp(-16, 16)
+        mask_bool = topo_loss_mask.bool().unsqueeze(-1)  # [B, N_s, N_p, 1]
+        n_valid = mask_bool.sum()
+        if n_valid > 0:
+            topo_loss = self.topo_criterion(
+                topo_logits_safe[mask_bool],
+                topo_gt.unsqueeze(-1).to(torch.float32)[mask_bool],
+            ).mean()
+        else:
+            topo_loss = torch.zeros((), device=topo_logits.device, dtype=topo_logits.dtype)
 
         loss = mask_loss + topo_loss
         self.log('train_mask_loss', mask_loss, on_step=True, on_epoch=False, prog_bar=True)
         self.log('train_topo_loss', topo_loss, on_step=True, on_epoch=False, prog_bar=True)
         self.log('train_loss', loss, on_step=True, on_epoch=False, prog_bar=True)
         return loss
+
+    def on_after_backward(self):
+        """
+        NaN 守门员: 反向传播后检查梯度, 任何 NaN/Inf 都把所有梯度清零,
+        让 optimizer.step() 等价于 no-op, 避免污染权重.
+        这是 fp16 训练的标准防御 (cf. https://github.com/Lightning-AI/lightning/issues/4956).
+        """
+        any_bad = False
+        for p in self.parameters():
+            if p.grad is None:
+                continue
+            if not torch.isfinite(p.grad).all():
+                any_bad = True
+                break
+        if any_bad:
+            for p in self.parameters():
+                if p.grad is not None:
+                    p.grad.detach_().zero_()
+            if self.global_step % 50 == 0:
+                print(f"[NaN-skip] step {self.global_step}: zeroed all grads (non-finite detected)")
 
     def validation_step(self, batch, batch_idx):
         rgb = batch['rgb']
@@ -729,16 +769,27 @@ class SAMRoadCompletion(pl.LightningModule):
         )
 
         gt_masks = torch.stack([keypoint_mask, road_mask], dim=3)
-        mask_loss = self.mask_criterion(mask_logits, gt_masks)
+        # NaN 修复: mask_logits 兜底 (与 training_step 保持一致)
+        mask_logits_safe = torch.nan_to_num(
+            mask_logits, nan=0.0, posinf=16.0, neginf=-16.0
+        ).clamp(-16, 16)
+        mask_loss = self.mask_criterion(mask_logits_safe, gt_masks)
 
         topo_gt = batch['connected'].to(torch.int32)
         topo_loss_mask = valid.to(torch.float32)
-        # clamp logits 防止 fp16 BCE 溢出
-        topo_logits_safe = topo_logits.clamp(-16, 16)
-        topo_loss = self.topo_criterion(topo_logits_safe, topo_gt.unsqueeze(-1).to(torch.float32))
-        topo_loss *= topo_loss_mask.unsqueeze(-1)
-        n_valid = topo_loss_mask.sum()
-        topo_loss = topo_loss.sum() / (n_valid + 1e-8)  # epsilon 防止零除 NaN
+        # NaN 修复: nan_to_num 兜底 + 布尔掩码 gather (避免 0*NaN=NaN 传播)
+        topo_logits_safe = torch.nan_to_num(
+            topo_logits, nan=0.0, posinf=16.0, neginf=-16.0
+        ).clamp(-16, 16)
+        mask_bool = topo_loss_mask.bool().unsqueeze(-1)
+        n_valid = mask_bool.sum()
+        if n_valid > 0:
+            topo_loss = self.topo_criterion(
+                topo_logits_safe[mask_bool],
+                topo_gt.unsqueeze(-1).to(torch.float32)[mask_bool],
+            ).mean()
+        else:
+            topo_loss = torch.zeros((), device=topo_logits.device, dtype=topo_logits.dtype)
 
         loss = mask_loss + topo_loss
         self.log('val_mask_loss', mask_loss, on_step=False, on_epoch=True, prog_bar=True)
