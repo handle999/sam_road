@@ -323,18 +323,85 @@ python engine/train_completion.py --config=config/toponet_vitb_256_spacenet_comp
 
 ### 推理
 
-```bash
-python engine/inferencer.py --config=<config> --checkpoint=<ckpt_path>
-python engine/inferencer_4ch.py --config=<config> --checkpoint=<ckpt_path>
-python engine/inferencer_completion.py --config=<config> --checkpoint=<ckpt_path>
+三个 inferencer 都把结果写到 `./save/<前缀>_<timestamp>/`，目录结构一致：
+
 ```
+save/<前缀>_<timestamp>/
+├── config.yaml      # 推理时使用的完整 config 副本
+├── graph/{name}.p   # 预测路网 (sat2graph 邻接表 pickle), 评估脚本读这个
+├── mask/            # {name}_road.png + {name}_itsc.png
+└── viz/{name}.png   # 节点+边叠加在原图上的可视化
+```
+
+各模型的 `<前缀>` 见下表，路径硬编码在源码里：
+
+| 脚本 | 输出前缀 | 必需参数 | 可选参数 |
+|---|---|---|---|
+| [engine/inferencer.py](engine/inferencer.py) | `save/infer_*` | `--config`, `--checkpoint` | `--output_dir <name>`（自定义子目录名） |
+| [engine/inferencer_4ch.py](engine/inferencer_4ch.py) | `save/<exp_id>` | `--config`, `--checkpoint`, `--exp_id` | — |
+| [engine/inferencer_completion.py](engine/inferencer_completion.py) | `save/infer_completion_*` | `--config`, `--checkpoint` | `--output_dir <name>`, `--input_graph_dir <dir>`（已知路网目录），`--traj_dir <dir>`（仅 Xian） |
+
+```bash
+# 原始模型 (timestamp 自动附加)
+python engine/inferencer.py \
+    --config config/toponet_vitb_256_spacenet.yaml \
+    --checkpoint checkpoints/samroad_spacenet/<best.ckpt>
+
+# 4 通道模型 (必须显式给 --exp_id, 否则报错; 用 CUDA_VISIBLE_DEVICES 选卡)
+CUDA_VISIBLE_DEVICES=0 python engine/inferencer_4ch.py \
+    --config config/toponet_vitb_256_spacenet.yaml \
+    --checkpoint checkpoints/samroad_4ch/<best.ckpt> \
+    --exp_id my_4ch_run
+
+# 补全模型 (用已知路网作为先验)
+python engine/inferencer_completion.py \
+    --config config/toponet_vitb_256_spacenet_completion.yaml \
+    --checkpoint checkpoints/samroad_completion/<best.ckpt> \
+    --input_graph_dir datasets/spacenet/RGB_1.0_meter
+```
+
+> 💡 想自定义输出名而不是用时间戳：`--output_dir my_run` →
+> 实际目录变成 `save/my_run/`（`output_dir_prefix` 不再生效）。
 
 ### 评估
 
+[metrics/eval.py](metrics/eval.py) 一站式地跑 APLS 和 TOPO 两个指标，
+直接读 `<inferencer 输出>/graph/{name}.p` 与 `datasets/<dataset>/...` 下的 GT 比较。
+
+**前置要求**：
+- `go` 编译器（APLS 用 Go 实现的二进制评估，本机已装 1.25.4）
+- 推理已跑完，`graph/` 目录里包含**测试集全部样本**的 `.p` 文件
+  （spacenet 测试集 382 张；漏样本会被 `SKIP: Missing` 跳过、最终指标偏乐观）
+
+**用法**（必须 `cd metrics/` 再跑，里面有大量 `../datasets/...` 相对路径）：
+
 ```bash
 cd metrics
-python eval.py --dataset spacenet --dir <输出目录>
+conda activate SAM   # 或对应训练环境
+
+# 一次跑两个指标 (默认), --workers 视机器核数, 16~32 比较合适
+python eval.py --dataset spacenet \
+               --dir save/infer_completion_<timestamp> \
+               --workers 16
+
+# 只跑其中一个
+python eval.py --dataset spacenet --dir save/<...> --metric topo --workers 16
+python eval.py --dataset spacenet --dir save/<...> --metric apls --workers 16
 ```
+
+**输出** 写到 `save/<...>/results/`：
+- `apls.json` — `{"apls": [[name, val], ...], "final_APLS": <mean>}`
+- `topo.json` — `{"mean topo": [F1, P, R], "f1": ...}`
+- `apls/{name}.txt` — 每张图一行 `precision recall apls`
+- `topo/{name}.txt` — 每张图最后一行 `precision recall`
+
+**预估时长**（spacenet 382 张，本机 384 核）：
+- `--workers 1`：约 17 分钟（APLS 单图 ~2 秒 + TOPO 单图 ~3 秒）
+- `--workers 16`：约 5–10 分钟
+- `--workers 32`：约 3–5 分钟
+
+> ⚠️ `--dataset` 必须与推理时 config 的 `DATASET` 一致。eval 不会自动检查，跑错了
+> 会报 `Missing pred` 或者用错的坐标系算指标。
 
 ### 坐标系验证
 
