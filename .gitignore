@@ -42,3 +42,7 @@ __pycache__
 
 # cache
 utils/prepare_dataset/
+
+# Lightning CSVLogger / runtime training logs (dynamic, written during training)
+train_logs/csv_completion/
+train_logs/csv/
