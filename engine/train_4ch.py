@@ -1,4 +1,11 @@
 from argparse import ArgumentParser
+import os
+import sys
+# 确保项目根目录在 sys.path 中
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -8,15 +15,16 @@ from tools.config_utils import load_config
 from data.dataset_4ch import SatMapDataset, graph_collate_fn
 from models.sam_road_4ch import SAMRoad
 
-import wandb
+from datetime import datetime
 
 import lightning.pytorch as pl
-from lightning.pytorch.callbacks import ModelCheckpoint
-from pytorch_lightning.loggers import WandbLogger
-from lightning.pytorch.callbacks import LearningRateMonitor
+from engine.callbacks import TextLogCallback, EarlyStoppingCallback
+from lightning.pytorch.loggers import CSVLogger
+from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 
 
 parser = ArgumentParser()
+parser.add_argument("--patience", default=0, type=int, help="Early stopping patience (0=disabled)")
 parser.add_argument(
     "--config",
     default=None,
@@ -36,7 +44,8 @@ parser.add_argument(
     "--dev_run", default=False, action='store_true'
 )
 parser.add_argument(
-    "--ckpt_path", default=None, help="path to checkpoint file"
+    "--gpus", default="0", type=str,
+    help="GPU id(s) to use, e.g. '0' or '0,1'"
 )
 
 
@@ -45,23 +54,9 @@ if __name__ == "__main__":
     config = load_config(args.config)
     dev_run = args.dev_run or args.fast_dev_run
 
-    
-    # start a new wandb run to track this script
-    wandb.init(
-        # set the wandb project where this run will be logged
-        project="sam_road",
-        # track hyperparameters and run metadata
-        config=config,
-        # disable wandb if debugging
-        # mode='disabled' if dev_run else None
-        mode='offline'
-    )
-
-
     # Good when model architecture/input shape are fixed.
     torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.enabled = True
-    
 
     net = SAMRoad(config)
 
@@ -85,28 +80,39 @@ if __name__ == "__main__":
         collate_fn=graph_collate_fn,
     )
 
+    # ---- Checkpoint: save top-5 by val_loss ----
+    dataset_name = config.DATASET
+    ckpt_dir = f"checkpoints/samroad_4ch_{dataset_name}/"
     checkpoint_callback = ModelCheckpoint(
-        dirpath=args.ckpt_path,          # 自定义保存目录
-        every_n_epochs=1, 
-        save_top_k=-1
+        dirpath=ckpt_dir,
+        filename="epoch-{epoch:02d}-{val_loss:.4f}",
+        monitor="val_loss",
+        every_n_epochs=1,
+        mode="min",
+        save_top_k=5,
+        save_last=True,
     )
+
     lr_monitor = LearningRateMonitor(logging_interval='step')
-
-    wandb_logger = WandbLogger()
-
-    # from lightning.pytorch.profilers import AdvancedProfiler
-    # profiler = AdvancedProfiler(dirpath='profile', filename='result_fast_matcher')
+    log_dir = "train_logs"
+    os.makedirs(log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    text_log_callback = TextLogCallback(log_path=os.path.join(log_dir, f"samroad_4ch_{dataset_name}_{timestamp}.txt"))
+    csv_logger = CSVLogger(save_dir="train_logs", name="csv", flush_logs_every_n_steps=10)
+    callbacks = [checkpoint_callback, lr_monitor, text_log_callback]
+    if args.patience > 0:
+        callbacks.append(EarlyStoppingCallback(patience=args.patience))
 
     trainer = pl.Trainer(
         max_epochs=config.TRAIN_EPOCHS,
+        accelerator="gpu",
+        devices=[int(g) for g in args.gpus.split(',')],
         check_val_every_n_epoch=1,
         num_sanity_val_steps=2,
-        callbacks=[checkpoint_callback, lr_monitor],
-        logger=wandb_logger,
+        callbacks=callbacks,
+        logger=csv_logger,
         fast_dev_run=args.fast_dev_run,
-        # strategy='ddp_find_unused_parameters_true',
         precision=args.precision,
-        # profiler=profiler
-        )
+    )
 
-    trainer.fit(net, train_dataloaders=train_loader, val_dataloaders=val_loader)
+    trainer.fit(net, train_dataloaders=train_loader, val_dataloaders=val_loader, ckpt_path=args.resume)

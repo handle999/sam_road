@@ -77,22 +77,24 @@ if __name__ == "__main__":
         collate_fn=graph_collate_fn,
     )
 
-    # ---- Checkpoint: 保存 val_loss 最小的 top-5 ----
+    # ---- Checkpoint: save top-5 by val_loss ----
+    dataset_name = config.DATASET
+    ckpt_dir = f"checkpoints/samroad_{dataset_name}/"
     checkpoint_callback = ModelCheckpoint(
-        dirpath="checkpoints/samroad_spacenet/",
+        dirpath=ckpt_dir,
         filename="epoch-{epoch:02d}-{val_loss:.4f}",
         monitor="val_loss",
         every_n_epochs=1,
         mode="min",
         save_top_k=5,
-        save_last=True,  # 额外保存最后一个 epoch
+        save_last=True,
     )
 
     lr_monitor = LearningRateMonitor(logging_interval='step')
     log_dir = "train_logs"
     os.makedirs(log_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    text_log_callback = TextLogCallback(log_path=os.path.join(log_dir, f"samroad_spacenet_{timestamp}.txt"))
+    text_log_callback = TextLogCallback(log_path=os.path.join(log_dir, f"samroad_{dataset_name}_{timestamp}.txt"))
     csv_logger = CSVLogger(save_dir="train_logs", name="csv", flush_logs_every_n_steps=10)
     callbacks = [checkpoint_callback, lr_monitor, text_log_callback]
     if args.patience > 0:

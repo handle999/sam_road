@@ -54,21 +54,17 @@ def spacenet_data_partition():
     return train_list, val_list, test_list
 
 
-# ==========================================
-# [MODIFICATION 1]: 新增 xian 数据集的划分函数
-def didi_data_partition():
-    # dataset partition
+def didi_xian_data_partition():
+    """Dataset partition for DiDi Xian (2019_400)."""
     with open('datasets/didi/xian/2019_400/data_split.json','r') as jf:
         data_list = json.load(jf)
-        # data_list = data_list['test'] + data_list['validation'] + data_list['train']
-    # train_list = [tile_index for _, tile_index in data_list['train']]
-    # val_list = [tile_index for _, tile_index in data_list['validation']]
-    # test_list = [tile_index for _, tile_index in data_list['test']]
     train_list = data_list['train']
     val_list = data_list['validation']
     test_list = data_list['test']
     return train_list, val_list, test_list
-# ==========================================
+
+# Legacy alias
+didi_data_partition = didi_xian_data_partition
 
 
 def get_patch_info_one_img(image_index, image_size, sample_margin, patch_size, patches_per_edge):
@@ -332,8 +328,7 @@ class SatMapDataset(Dataset):
         self.config = config
         self.is_train = is_train
         
-        # [MODIFICATION 2]: 支持 didi 数据集
-        assert self.config.DATASET in {'cityscale', 'spacenet', 'didi'}
+        assert self.config.DATASET in {'cityscale', 'spacenet', 'didi_xian'}
         if self.config.DATASET == 'cityscale':
             self.IMAGE_SIZE = 2048
             # TODO: SAMPLE_MARGIN here is for training, the one in config is for inference
@@ -384,32 +379,25 @@ class SatMapDataset(Dataset):
             # takes [N, 2] points
             coord_transform = lambda v : np.stack([v[:, 1], 400 - v[:, 0]], axis=1)
 
-        # ==========================================
-        # [MODIFICATION 3]: xian 数据集配置，尺寸应该是 400
-        elif self.config.DATASET == 'didi':
+        elif self.config.DATASET == 'didi_xian':
             self.IMAGE_SIZE = 400
-            self.SAMPLE_MARGIN = 0 # 类似 spacenet
-            
-            # 假设你的 xian 放在根目录或者 xian 目录下，这里做对应修改
-            # 你提到的文件名是 region_0_sat.png 等
+            self.SAMPLE_MARGIN = 0  # same as spacenet
+
             rgb_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_sat.png'
 
-            # 注意区分 train 和 test 的 active mask 路径和命名
+            # DiDi Xian has dedicated active masks from trajectory data
             if self.is_train:
-                active_mask_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_active.png' # 或 _gt.png
+                active_mask_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_active.png'
             else:
                 active_mask_pattern = 'datasets/didi/xian/2019_400/sample_0.5/region_{}_refine_gt_graph_partial.png'
-            
-            # 注意：SAM-Road 需要从 gt_graph 或者 gt.png 生成 keypoint 和 road mask
-            # 需要先运行 SAM-Road 提供的预处理脚本生成 processed/ 目录
+
             keypoint_mask_pattern = 'datasets/didi/xian/2019_400/processed/keypoint_mask_{}.png'
             road_mask_pattern = 'datasets/didi/xian/2019_400/processed/road_mask_{}.png'
-            
             gt_graph_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_refine_gt_graph.p'
-            
-            train, val, test = didi_data_partition()
-            coord_transform = lambda v : np.stack([v[:, 1], 400 - v[:, 0]], axis=1)  # xian是(y_up,x)格式，和spacenet一致
-        # ==========================================
+
+            train, val, test = didi_xian_data_partition()
+            # DiDi Xian uses (y_up, x) bottom-left coordinate format, same as SpaceNet
+            coord_transform = lambda v : np.stack([v[:, 1], 400 - v[:, 0]], axis=1)
 
         train_split = train + val
         test_split = test
@@ -486,8 +474,7 @@ class SatMapDataset(Dataset):
                 return max(1, int(self.IMAGE_SIZE / self.config.PATCH_SIZE)) ** 2 * 2500
             elif self.config.DATASET == 'spacenet':
                 return 84667
-            # [MODIFICATION 6]: 设定 xian 数据集的虚拟 Epoch 大小
-            elif self.config.DATASET == 'didi':
+            elif self.config.DATASET == 'didi_xian':
                 return 574 * 200
         else:
             return len(self.eval_patches)
@@ -522,9 +509,8 @@ class SatMapDataset(Dataset):
             keypoint_mask_patch = np.rot90(keypoint_mask_patch, rot_index, [0, 1]).copy()
             road_mask_patch = np.rot90(road_mask_patch, rot_index, [0, 1]).copy()
 
-            # [MODIFICATION 8]: 同步旋转 active mask
-            if self.config.DATASET == 'didi':
-                active_mask_patch = np.rot90(active_mask_patch, rot_index, [0, 1]).copy()
+            # Rotate active mask together with other patches (all datasets in 4ch mode)
+            active_mask_patch = np.rot90(active_mask_patch, rot_index, [0, 1]).copy()
         
         # Sample graph labels from patch
         patch = ((begin_x, begin_y), (end_x, end_y))
