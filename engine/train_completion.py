@@ -43,7 +43,7 @@ parser.add_argument("--config", default=None,
 parser.add_argument("--resume", default=None,
                     help="checkpoint of the last epoch of the model")
 parser.add_argument("--precision", default=16, help="32 or 16")
-parser.add_argument("--patience", default=5, type=int,
+parser.add_argument("--patience", default=0, type=int,
                     help="Early stopping patience (0=disabled)")
 parser.add_argument("--fast_dev_run", default=False, action='store_true')
 parser.add_argument("--dev_run", default=False, action='store_true')
