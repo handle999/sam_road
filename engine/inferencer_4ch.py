@@ -5,6 +5,7 @@ import torch
 import cv2
 
 from tools.config_utils import load_config, create_output_dir_and_save_config
+from tools.run_info import dump_run_info, mark_run_finished
 from data.dataset_4ch import cityscale_data_partition, read_rgb_img, get_patch_info_one_img
 from data.dataset_4ch import spacenet_data_partition
 # from models.sam_road import SAMRoad   # 如果使用其他模型，请取消相应的注释
@@ -283,6 +284,16 @@ if __name__ == "__main__":
         else:
             output_dir = create_output_dir_and_save_config(output_dir_prefix, config)
 
+    # 写运行元信息 (与 config.yaml 分离)
+    run_info_path = dump_run_info(
+        output_dir=output_dir,
+        script=__file__,
+        args=args,
+        config_source=args.config,
+        checkpoint=args.checkpoint,
+        extra={'task': 'inference', 'model': 'sam_road_4ch'},
+    )
+
     import logging
     logging.basicConfig(
         level=logging.INFO,
@@ -467,3 +478,4 @@ if __name__ == "__main__":
     logger.info(time_txt)
     with open(os.path.join(output_dir, 'inference_time.txt'), 'w') as f:
         f.write(time_txt)
+    mark_run_finished(run_info_path)

@@ -30,6 +30,7 @@ import cv2
 import math
 
 from tools.config_utils import load_config, create_output_dir_and_save_config
+from tools.run_info import dump_run_info, mark_run_finished
 from data.dataset import cityscale_data_partition, read_rgb_img, get_patch_info_one_img
 from data.dataset import spacenet_data_partition
 from data.dataset_completion import didi_data_partition, render_graph_feature_map
@@ -512,6 +513,16 @@ if __name__ == "__main__":
     else:
         output_dir = create_output_dir_and_save_config(output_dir_prefix, config)
 
+    # 写运行元信息 (与 config.yaml 分离)
+    run_info_path = dump_run_info(
+        output_dir=output_dir,
+        script=__file__,
+        args=args,
+        config_source=args.config,
+        checkpoint=args.checkpoint,
+        extra={'task': 'inference', 'model': 'sam_road_completion'},
+    )
+
     total_inference_seconds = 0.0
 
     for img_id in test_img_indices:
@@ -579,3 +590,4 @@ if __name__ == "__main__":
     print(time_txt)
     with open(os.path.join(output_dir, 'inference_time.txt'), 'w') as f:
         f.write(time_txt)
+    mark_run_finished(run_info_path)

@@ -12,6 +12,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from tools.config_utils import load_config
+from tools.run_info import dump_run_info, mark_run_finished
 from data.dataset import SatMapDataset, graph_collate_fn
 from models.sam_road import SAMRoad
 
@@ -100,6 +101,26 @@ if __name__ == "__main__":
     if args.patience > 0:
         callbacks.append(EarlyStoppingCallback(patience=args.patience))
 
+    # 写运行元信息: ckpt 目录 + train_logs/ 各放一份, 与训出的权重和文本日志同位
+    os.makedirs(ckpt_dir, exist_ok=True)
+    run_info_path = dump_run_info(
+        output_dir=ckpt_dir,
+        script=__file__,
+        args=args,
+        config_source=args.config,
+        extra={'task': 'train', 'model': 'sam_road',
+               'text_log': os.path.join(log_dir, f"samroad_{dataset_name}_{timestamp}.txt")},
+        filename=f'run_info_{timestamp}.yaml',
+    )
+    dump_run_info(
+        output_dir=log_dir,
+        script=__file__,
+        args=args,
+        config_source=args.config,
+        extra={'task': 'train', 'model': 'sam_road', 'ckpt_dir': ckpt_dir},
+        filename=f'run_info_{timestamp}.yaml',
+    )
+
     trainer = pl.Trainer(
         max_epochs=config.TRAIN_EPOCHS,
         accelerator="gpu",
@@ -113,3 +134,4 @@ if __name__ == "__main__":
     )
 
     trainer.fit(net, train_dataloaders=train_loader, val_dataloaders=val_loader, ckpt_path=args.resume)
+    mark_run_finished(run_info_path)

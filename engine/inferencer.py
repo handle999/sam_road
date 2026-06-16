@@ -5,6 +5,7 @@ import torch
 import cv2
 
 from tools.config_utils import load_config, create_output_dir_and_save_config
+from tools.run_info import dump_run_info, mark_run_finished
 from data.dataset import cityscale_data_partition, read_rgb_img, get_patch_info_one_img
 from data.dataset import spacenet_data_partition
 from models.sam_road import SAMRoad   # 如果使用其他模型，请取消相应的注释
@@ -279,7 +280,17 @@ if __name__ == "__main__":
         output_dir = create_output_dir_and_save_config(output_dir_prefix, config, specified_dir=f'./save/{args.output_dir}')
     else:
         output_dir = create_output_dir_and_save_config(output_dir_prefix, config)
-    
+
+    # 写运行元信息 (与 config.yaml 分离): 记录 ckpt / config 路径 / 命令行 / git / 环境
+    run_info_path = dump_run_info(
+        output_dir=output_dir,
+        script=__file__,
+        args=args,
+        config_source=args.config,
+        checkpoint=args.checkpoint,
+        extra={'task': 'inference', 'model': 'sam_road'},
+    )
+
     total_inference_seconds = 0.0
 
     for img_id in test_img_indices:
@@ -359,3 +370,5 @@ if __name__ == "__main__":
     print(time_txt)
     with open(os.path.join(output_dir, 'inference_time.txt'), 'w') as f:
         f.write(time_txt)
+    # 在 run_info.yaml 写入 end_time + duration_seconds
+    mark_run_finished(run_info_path)
