@@ -9,11 +9,14 @@
 
 ## 时间线
 
-| 轮次 | 日志文件 | 第一次 NaN | 现象 |
-|------|---------|-----------|------|
-| 第一轮（修复前） | `train_logs/samroad_completion_spacenet_v2_20260611.txt` | step 1695，`train_topo_loss=nan` | NaN/正常交替 ~400 步，step 2082 起 mask_loss 也 NaN，全程崩溃 |
-| 第二轮（部分修复后） | `train_logs/samroad_completion_spacenet_20260613_210107.txt` | step 716，**`train_mask_loss=nan`**；topo 卡在 `0.6931 = ln(2)` | mask 路径未兜底，4577/5292 steps NaN |
-| 第三轮（完整修复后） | `train_logs/samroad_completion_spacenet_20260613_212138.txt` 等 | 无 | fast_dev_run + 长训均稳定 |
+> 注: 早期 (修复前 / 部分修复后) 的两次失败日志体积过大且诊断价值已被本文吸收,
+> 已从仓库移出, 仅保留现象描述。
+
+| 轮次 | 第一次 NaN | 现象 |
+|------|-----------|------|
+| 第一轮（修复前） | step 1695，`train_topo_loss=nan` | NaN/正常交替 ~400 步，step 2082 起 mask_loss 也 NaN，全程崩溃 |
+| 第二轮（部分修复后） | step 716，**`train_mask_loss=nan`**；topo 卡在 `0.6931 = ln(2)` | mask 路径未兜底，4577/5292 steps NaN |
+| 第三轮（完整修复后） | 无 | fast_dev_run + 长训均稳定，详见 [train_logs/samroad_completion_spacenet_20260613_212427.txt](../train_logs/samroad_completion_spacenet_20260613_212427.txt)（6 epoch 完整跑完, 0 NaN, val_loss=0.2822, topo_f1=0.8818）|
 
 ---
 

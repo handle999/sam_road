@@ -1,4 +1,0 @@
-SAM-Road Training Log - 2026-06-13 21:21:38
-Epoch 0: 1/5292, train_mask_loss=0.6026, train_topo_loss=0.7064, train_loss=1.3090
-Epoch 0 val:, val_mask_loss=0.5857, val_topo_loss=0.5747, val_loss=1.1604
---- End of Epoch 0 ---
