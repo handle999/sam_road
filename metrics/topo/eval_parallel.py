@@ -66,10 +66,18 @@ def create_graph(m):
 
     return graph, min_lat_local, max_lon_local
 
-def process_single_tile(tile_idx, savedir, interval, matching_threshold):
+def process_single_tile(tile_idx, savedir, interval, matching_threshold, dataset='spacenet'):
     """独立的单进程工作单元"""
     graph_prop_path = f'../{savedir}/graph/{tile_idx}.p'
-    graph_gt_path = f'../datasets/spacenet/RGB_1.0_meter/{tile_idx}__gt_graph.p'
+    # 按 dataset 选 GT 路径模板, 与 metrics/topo/main.py 保持一致
+    if dataset == 'cityscale':
+        graph_gt_path = f'../datasets/cityscale/20cities/region_{tile_idx}_graph_gt.pickle'
+    elif dataset == 'spacenet':
+        graph_gt_path = f'../datasets/spacenet/RGB_1.0_meter/{tile_idx}__gt_graph.p'
+    elif dataset == 'didi':
+        graph_gt_path = f'../datasets/didi/xian/2019_400/xian_2019_400/region_{tile_idx}_graph_gt.pickle'
+    else:
+        return f"ERROR: unknown dataset '{dataset}'"
     output_txt = f'../{savedir}/results/topo/{tile_idx}.txt'
     
     if not os.path.exists(graph_prop_path):
@@ -119,18 +127,32 @@ if __name__ == '__main__':
     parser.add_argument('-workers', type=int, default=1)
     parser.add_argument('-matching_threshold', type=float, default=0.00010)
     parser.add_argument('-interval', type=float, default=0.00005)
+    parser.add_argument('-dataset', type=str, default='spacenet',
+                        choices=['cityscale', 'spacenet', 'didi'],
+                        help='Dataset type, must match training/inference config')
     args = parser.parse_args()
 
     out_dir = f'../{args.savedir}/results/topo'
     os.makedirs(out_dir, exist_ok=True)
-    
+
     # 并发前清理旧文件
     for f in os.listdir(out_dir):
         if f.endswith('.txt'):
             os.remove(os.path.join(out_dir, f))
 
-    with open('../datasets/spacenet/data_split.json','r') as jf:
-        tile_list = json.load(jf)['test']
+    # 按 dataset 选测试集列表 (与 main.py 保持一致)
+    if args.dataset == 'cityscale':
+        # 注: cityscale 的测试 ID 是固定的整数列表 (与训练脚本里的逻辑一致)
+        tile_list = [8, 9, 19, 28, 29, 39, 48, 49, 59, 68, 69, 79, 88, 89, 99,
+                     108, 109, 119, 128, 129, 139, 148, 149, 159, 168, 169, 179]
+    elif args.dataset == 'spacenet':
+        with open('../datasets/spacenet/data_split.json', 'r') as jf:
+            tile_list = json.load(jf)['test']
+    elif args.dataset == 'didi':
+        with open('../datasets/didi/xian/2019_400/data_split.json', 'r') as jf:
+            tile_list = json.load(jf)['test']
+    else:
+        raise ValueError(f"Unknown dataset: {args.dataset}")
 
     try:
         from tqdm import tqdm
@@ -141,7 +163,9 @@ if __name__ == '__main__':
     # 重点：纯 Python CPU 密集型任务，必须用 ProcessPoolExecutor 多进程
     with ProcessPoolExecutor(max_workers=args.workers) as executor:
         futures = {
-            executor.submit(process_single_tile, tile, args.savedir, args.interval, args.matching_threshold): tile 
+            executor.submit(process_single_tile, tile, args.savedir,
+                            args.interval, args.matching_threshold,
+                            args.dataset): tile
             for tile in tile_list
         }
         
