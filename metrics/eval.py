@@ -88,7 +88,11 @@ def eval_apls(dataset, target_dir, workers=None):
     def process_single_image(name):
         pred_path = f"../{target_dir}/graph/{name}.p"
         gt_path = gt_pattern.format(name)
-        out_txt = f"../{target_dir}/results/apls/{name}.txt"
+        # 关键: 用绝对路径, 因为 Go binary 的 cwd 是 apls_dir (即 metrics/apls/),
+        # 而 pred/gt 相对路径基准是 metrics/. 用绝对路径避免拼接基准目录错位 →
+        # 之前 Go binary 用 os.Args[3] 写文件, 写到了 metrics/save/.../ 而不是
+        # save/.../, 导致 out_txt 永远不存在 → APLS 报全 SKIP → 沉默 0 分。
+        out_txt = os.path.abspath(f"../{target_dir}/results/apls/{name}.txt")
 
         if not os.path.exists(pred_path):
             return f"SKIP: Missing {pred_path}"
@@ -108,12 +112,17 @@ def eval_apls(dataset, target_dir, workers=None):
             if res_prop.returncode != 0:
                 return f"Convert Prop Error ({name}): {res_prop.stderr}"
 
+            # temp_gt/temp_prop 也要传绝对路径 (Go binary cwd=apls_dir)
             res_go = subprocess.run(
-                [abs_go_bin, f"../{temp_gt}", f"../{temp_prop}", out_txt, dataset],
+                [abs_go_bin, os.path.abspath(temp_gt), os.path.abspath(temp_prop),
+                 out_txt, dataset],
                 cwd=apls_dir, capture_output=True, text=True
             )
             if res_go.returncode != 0:
                 return f"Go Execution Error ({name}): {res_go.stderr}"
+            # Go 在 returncode=0 时也可能没写文件 (路径错或权限错), 显式校验
+            if not os.path.exists(out_txt):
+                return f"Go Wrote No Output ({name}): expected {out_txt}, stderr={res_go.stderr[:200]}"
 
             return "SUCCESS"
         except Exception as e:
