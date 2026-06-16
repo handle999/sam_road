@@ -373,6 +373,12 @@ CUDA_VISIBLE_DEVICES=1 python -m engine.inferencer_completion \
     --config config/toponet_vitb_256_spacenet_completion.yaml \
     --checkpoint "checkpoints/samroad_completion/<best.ckpt>" \
     --input_graph_dir datasets/spacenet/RGB_1.0_meter
+
+# 补全模型 - 无先验回退模式 (省略 --input_graph_dir, 模型退化为纯 SAM-Road extraction)
+# 主要用于: 评估补全模型在"无先验"输入上的纯生成能力, 与 inferencer.py 做对照
+CUDA_VISIBLE_DEVICES=1 python -m engine.inferencer_completion \
+    --config config/toponet_vitb_256_spacenet_completion.yaml \
+    --checkpoint "checkpoints/samroad_completion/<best.ckpt>"
 ```
 
 > 💡 **几个常见坑**：
