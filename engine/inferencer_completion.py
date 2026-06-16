@@ -525,6 +525,14 @@ if __name__ == "__main__":
 
     total_inference_seconds = 0.0
 
+    # 启动时一次性提示运行模式 (而不是每张图都打印)
+    if args.input_graph or args.input_graph_dir:
+        graph_src = args.input_graph or args.input_graph_dir
+        print(f'==> Completion mode: using known graph from {graph_src}')
+    else:
+        print('==> No --input_graph / --input_graph_dir given. '
+              'Running in full extraction fallback (model degrades to pure SAM-Road).')
+
     for img_id in test_img_indices:
         print(f'Processing {img_id}')
         img = read_rgb_img(rgb_pattern.format(img_id))
@@ -533,8 +541,7 @@ if __name__ == "__main__":
         known_graph_adj = load_known_graph(img_id, config)
         if known_graph_adj is not None:
             print(f'  Loaded known graph with {len(known_graph_adj)} nodes')
-        else:
-            print(f'  No known graph provided, running full extraction mode')
+        # else 分支不再每张图都重复打印 fallback 提示
 
         # 加载轨迹热力图 (仅 Xian)
         traj_heatmap = load_traj_heatmap(img_id, config)
