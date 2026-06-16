@@ -341,31 +341,43 @@ save/<前缀>_<timestamp>/
 | [engine/inferencer_4ch.py](engine/inferencer_4ch.py) | `save/<exp_id>` | `--config`, `--checkpoint`, `--exp_id` | — |
 | [engine/inferencer_completion.py](engine/inferencer_completion.py) | `save/infer_completion_*` | `--config`, `--checkpoint` | `--output_dir <name>`, `--input_graph_dir <dir>`（已知路网目录），`--traj_dir <dir>`（仅 Xian） |
 
-```bash
-# 原始模型 (timestamp 自动附加)
-python engine/inferencer.py \
-    --config config/toponet_vitb_256_spacenet.yaml \
-    --checkpoint checkpoints/samroad_spacenet/<best.ckpt>
+> ⚠️ **必须用 `python -m engine.xxx` 启动，不能用 `python engine/xxx.py`。**
+> `inferencer.py` 和 `inferencer_4ch.py` 没有在脚本顶部插入 `sys.path`，
+> 直接按文件路径跑会报 `ModuleNotFoundError: No module named 'tools'`。
+> 用 `-m` 形式 Python 把 cwd（项目根）当作模块搜索根，`tools/`、`data/`、`models/` 都能正确解析。
 
-# 4 通道模型 (必须显式给 --exp_id, 否则报错; 用 CUDA_VISIBLE_DEVICES 选卡)
-CUDA_VISIBLE_DEVICES=0 python engine/inferencer_4ch.py \
+```bash
+cd /home/hanhaoyu/sam_road
+conda activate SAM
+
+# 原始模型 (timestamp 自动附加 → save/infer_<timestamp>/)
+CUDA_VISIBLE_DEVICES=1 python -m engine.inferencer \
+    --config config/toponet_vitb_256_spacenet_local.yaml \
+    --checkpoint "checkpoints/samroad_spacenet/<best.ckpt>"
+
+# 4 通道模型 (必须显式给 --exp_id, 否则报错)
+CUDA_VISIBLE_DEVICES=1 python -m engine.inferencer_4ch \
     --config config/toponet_vitb_256_spacenet.yaml \
-    --checkpoint checkpoints/samroad_4ch/<best.ckpt> \
+    --checkpoint "checkpoints/samroad_4ch/<best.ckpt>" \
     --exp_id my_4ch_run
 
-# 补全模型 (用已知路网作为先验)
-python engine/inferencer_completion.py \
+# 补全模型 (用已知路网作为先验; 此脚本内部已插 sys.path, -m 不强制但保持风格统一)
+CUDA_VISIBLE_DEVICES=1 python -m engine.inferencer_completion \
     --config config/toponet_vitb_256_spacenet_completion.yaml \
-    --checkpoint checkpoints/samroad_completion/<best.ckpt> \
+    --checkpoint "checkpoints/samroad_completion/<best.ckpt>" \
     --input_graph_dir datasets/spacenet/RGB_1.0_meter
 ```
 
-> 💡 想自定义输出名而不是用时间戳：`--output_dir my_run` →
-> 实际目录变成 `save/my_run/`（`output_dir_prefix` 不再生效）。
+> 💡 **几个常见坑**：
+> - 多卡机用 `CUDA_VISIBLE_DEVICES=N` 选卡，**不是** `CUDA_VISIBLE_DIVICES`（拼写易错），
+>   推理脚本内部用 `args.device="cuda"`，不接受 `--gpus` 参数
+> - ckpt 文件名带 `=` 字符（PL 默认模板）：建议用双引号包起来 `"checkpoints/.../epoch-epoch=00-val_loss=0.1148.ckpt"`
+> - 想自定义输出名而不是用时间戳：`--output_dir my_run` → 实际目录 `save/my_run/`（`output_dir_prefix` 不再生效）
+> - 找最佳 ckpt：`ls -lh checkpoints/samroad_spacenet/`，挑文件名里 `val_loss=` 最小的那个
 
 ### 评估
 
-[metrics/eval.py](metrics/eval.py) 一站式地跑 APLS 和 TOPO 两个指标，
+[metrics/eval.py](metrics/eval.py) 一站式跑 APLS 和 TOPO 两个指标，
 直接读 `<inferencer 输出>/graph/{name}.p` 与 `datasets/<dataset>/...` 下的 GT 比较。
 
 **前置要求**：
@@ -373,21 +385,25 @@ python engine/inferencer_completion.py \
 - 推理已跑完，`graph/` 目录里包含**测试集全部样本**的 `.p` 文件
   （spacenet 测试集 382 张；漏样本会被 `SKIP: Missing` 跳过、最终指标偏乐观）
 
-**用法**（必须 `cd metrics/` 再跑，里面有大量 `../datasets/...` 相对路径）：
+**用法**（必须 `cd metrics/` 再跑，eval.py 内部用大量 `../datasets/...` 相对路径）：
 
 ```bash
-cd metrics
-conda activate SAM   # 或对应训练环境
+cd /home/hanhaoyu/sam_road/metrics
+conda activate SAM
 
 # 一次跑两个指标 (默认), --workers 视机器核数, 16~32 比较合适
 python eval.py --dataset spacenet \
-               --dir save/infer_completion_<timestamp> \
+               --dir save/infer_<timestamp> \
                --workers 16
 
 # 只跑其中一个
 python eval.py --dataset spacenet --dir save/<...> --metric topo --workers 16
 python eval.py --dataset spacenet --dir save/<...> --metric apls --workers 16
 ```
+
+> 💡 **`--dir` 路径相对于项目根**（不是相对 `metrics/`），eval.py 内部统一加 `../` 前缀。
+> 例如推理输出在 `/home/hanhaoyu/sam_road/save/infer_20260614_010203/`，参数就写
+> `--dir save/infer_20260614_010203`，**不要**写绝对路径或 `../save/...`。
 
 **输出** 写到 `save/<...>/results/`：
 - `apls.json` — `{"apls": [[name, val], ...], "final_APLS": <mean>}`
@@ -396,12 +412,36 @@ python eval.py --dataset spacenet --dir save/<...> --metric apls --workers 16
 - `topo/{name}.txt` — 每张图最后一行 `precision recall`
 
 **预估时长**（spacenet 382 张，本机 384 核）：
-- `--workers 1`：约 17 分钟（APLS 单图 ~2 秒 + TOPO 单图 ~3 秒）
-- `--workers 16`：约 5–10 分钟
-- `--workers 32`：约 3–5 分钟
+
+| `--workers` | 总时长 | 适用场景 |
+|---|---|---|
+| 1 | ~17 分钟 | 单步调试，看具体哪张图卡住 |
+| 16 | ~5–10 分钟 | 日常跑，CPU 占用约 16 核（多用户友好）|
+| 32 | ~3–5 分钟 | 全机空闲时最快 |
 
 > ⚠️ `--dataset` 必须与推理时 config 的 `DATASET` 一致。eval 不会自动检查，跑错了
-> 会报 `Missing pred` 或者用错的坐标系算指标。
+> 会报 `Missing pred` 或者用错的坐标系算指标，最终数值看上去合理但实际无意义。
+
+#### 一条命令把推理 + 评估串起来
+
+跑完推理后立刻评估的常用模板（注意推理输出的目录要从终端日志里拿，或用 `--output_dir` 自己起名）：
+
+```bash
+# 1. 推理 (会打印输出目录, 例如 save/infer_my_run/)
+cd /home/hanhaoyu/sam_road
+CUDA_VISIBLE_DEVICES=1 python -m engine.inferencer \
+    --config config/toponet_vitb_256_spacenet_local.yaml \
+    --checkpoint "checkpoints/samroad_spacenet/<best.ckpt>" \
+    --output_dir my_run
+
+# 2. 评估 (用上一步固定的目录名, 不必抄 timestamp)
+cd metrics
+python eval.py --dataset spacenet --dir save/my_run --workers 16
+
+# 3. 看结果
+cat ../save/my_run/results/apls.json | python -m json.tool | head
+cat ../save/my_run/results/topo.json | python -m json.tool | head
+```
 
 ### 坐标系验证
 
