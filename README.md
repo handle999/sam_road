@@ -124,7 +124,9 @@ sam_road/
 ├── postprocess/       # 图提取、triage
 ├── scripts/           # 验证 & 可视化脚本
 ├── sam/               # SAM 子模块
-├── tools/             # 工具集 (plot_loss, param_exps 等)
+├── tools/             # 工具集 (config_utils, run_info, plot_loss, param_exps ...)
+│   ├── config_utils.py        # load_config / 输出目录创建
+│   └── run_info.py            # 训练/推理 run_info.yaml dumper (复现用)
 ├── metrics/           # APLS & TOPO 评估
 ├── conda_only.yml
 ├── myenv.yml
@@ -327,11 +329,16 @@ python engine/train_completion.py --config=config/toponet_vitb_256_spacenet_comp
 
 ```
 save/<前缀>_<timestamp>/
-├── config.yaml      # 推理时使用的完整 config 副本
-├── graph/{name}.p   # 预测路网 (sat2graph 邻接表 pickle), 评估脚本读这个
-├── mask/            # {name}_road.png + {name}_itsc.png
-└── viz/{name}.png   # 节点+边叠加在原图上的可视化
+├── config.yaml         # 推理时使用的模型 config 副本
+├── run_info.yaml       # 运行元信息 (ckpt 路径 / 命令行 / git commit / 环境 / 耗时)
+├── inference_time.txt  # 总推理时长
+├── graph/{name}.p      # 预测路网 (sat2graph 邻接表 pickle), 评估脚本读这个
+├── mask/               # {name}_road.png + {name}_itsc.png
+└── viz/{name}.png      # 节点+边叠加在原图上的可视化
 ```
+
+> 💡 **`config.yaml` vs `run_info.yaml`**：前者是模型超参（机器读，能 `load_config` 直接重跑），后者是这次"怎么跑的"（人看，回答"哪份 ckpt？哪条命令？哪个 git commit？"）。两者关注点分离。
+> 训练时类似的 `run_info_<timestamp>.yaml` 会同时写到 `checkpoints/<exp>/` 和 `train_logs/`，让权重文件 / 文本日志都能反查到来源。
 
 各模型的 `<前缀>` 见下表，路径硬编码在源码里：
 
