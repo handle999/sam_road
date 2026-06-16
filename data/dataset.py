@@ -427,7 +427,7 @@ class SatMapDataset(Dataset):
             elif self.config.DATASET == 'spacenet':
                 return 84667
             elif self.config.DATASET == 'didi_xian':
-                return 574 * 200
+                return 516 * 50
         else:
             return len(self.eval_patches)
 

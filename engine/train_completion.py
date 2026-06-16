@@ -102,7 +102,7 @@ if __name__ == "__main__":
         monitor="val_loss",
         every_n_epochs=1,
         mode="min",
-        save_top_k=5,
+        save_top_k=-1,
         save_last=True,  # 额外保存最后一个 epoch
     )
 

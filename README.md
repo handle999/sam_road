@@ -248,6 +248,20 @@ python engine/train_4ch.py --config=config/toponet_vitb_256_spacenet.yaml
 python engine/train_completion.py --config=config/toponet_vitb_256_spacenet_completion.yaml
 ```
 
+#### 训练参数一览
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `--config` | `None` | YAML 配置文件路径，定义 BATCH_SIZE / LR / DATASET 等超参，见 `config/` |
+| `--resume` | `None` | 从断点续训，传入 ckpt 文件路径 |
+| `--gpus` | `"0"` | GPU 编号，单卡 `"0"` / 多卡 `"0,1"`（train_4ch.py 无此参数，用 `CUDA_VISIBLE_DEVICES`） |
+| `--precision` | `16` | 精度档位：`16` (fp16 mixed) / `bf16-mixed` / `32` (fp32)，详见下方 `--precision` 专节 |
+| `--patience` | `0` | Early stopping 等待轮数；`0` = 不启用；`>0` 时 val_loss 连续 patience 轮不降则停 |
+| `--fast_dev_run` | `False` | 冒烟测试：仅跑 1 个 train batch + 1 个 val batch，不写 ckpt |
+| `--dev_run` | `False` | 开发模式：数据集取小子集，但走完整 trainer（含真实 epoch 和验证） |
+
+> `train.py` / `train_4ch.py` / `train_completion.py` 三个脚本参数完全相同（除 `train_4ch.py` 无 `--gpus`）。
+
 #### 多卡机：指定单卡训练
 
 `engine/train.py` 和 `engine/train_completion.py` 内置 `--gpus` 参数（默认 `"0"`，即第 0 块卡），多卡机要训单卡时显式传：
@@ -340,13 +354,30 @@ save/<前缀>_<timestamp>/
 > 💡 **`config.yaml` vs `run_info.yaml`**：前者是模型超参（机器读，能 `load_config` 直接重跑），后者是这次"怎么跑的"（人看，回答"哪份 ckpt？哪条命令？哪个 git commit？"）。两者关注点分离。
 > 训练时类似的 `run_info_<timestamp>.yaml` 会同时写到 `checkpoints/<exp>/` 和 `train_logs/`，让权重文件 / 文本日志都能反查到来源。
 
-各模型的 `<前缀>` 见下表，路径硬编码在源码里：
+#### 推理参数一览
 
-| 脚本 | 输出前缀 | 必需参数 | 可选参数 |
-|---|---|---|---|
-| [engine/inferencer.py](engine/inferencer.py) | `save/infer_*` | `--config`, `--checkpoint` | `--output_dir <name>`（自定义子目录名） |
-| [engine/inferencer_4ch.py](engine/inferencer_4ch.py) | `save/<exp_id>` | `--config`, `--checkpoint`, `--exp_id` | — |
-| [engine/inferencer_completion.py](engine/inferencer_completion.py) | `save/infer_completion_*` | `--config`, `--checkpoint` | `--output_dir <name>`, `--input_graph_dir <dir>`（已知路网目录），`--traj_dir <dir>`（仅 Xian） |
+**通用参数**（三个推理脚本均有）：
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `--config` | `None` | 模型配置 YAML，需与训练时一致 |
+| `--checkpoint` | `None` | 模型 ckpt 文件路径 |
+| `--output_dir` | `None` | 自定义输出子目录名（默认用时间戳） |
+| `--device` | `"cuda"` | 推理设备：`cuda` / `cpu` |
+
+**补全模型专属参数**（仅 `inferencer_completion.py`）：
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `--input_graph` | `None` | 单个已知路网 pickle 文件路径（邻接表格式） |
+| `--input_graph_dir` | `None` | 已知路网 pickle 目录（每个 region 一个 .p 文件） |
+| `--traj_dir` | `None` | 轨迹热力图目录（仅 Xian 数据集，active.png） |
+
+**4 通道模型专属参数**（仅 `inferencer_4ch.py`）：
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `--exp_id` | 必填 | 实验标识，输出目录 `save/<exp_id>/` |
 
 > ⚠️ **必须用 `python -m engine.xxx` 启动，不能用 `python engine/xxx.py`。**
 > `inferencer.py` 和 `inferencer_4ch.py` 没有在脚本顶部插入 `sys.path`，
@@ -392,6 +423,15 @@ CUDA_VISIBLE_DEVICES=1 python -m engine.inferencer_completion \
 
 [metrics/eval.py](metrics/eval.py) 一站式跑 APLS 和 TOPO 两个指标，
 直接读 `<inferencer 输出>/graph/{name}.p` 与 `datasets/<dataset>/...` 下的 GT 比较。
+
+#### 评估参数一览
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `--dataset` | 必填 | 数据集类型：`cityscale` / `spacenet` / `didi` |
+| `--dir` | 必填 | 推理输出目录（相对项目根，如 `save/infer_20260614`） |
+| `--metric` | `all` | 评估指标：`apls` / `topo` / `all` |
+| `--workers` | `None`（自动） | 并行 worker 数，16~32 适合多核日常跑 |
 
 **前置要求**：
 - `go` 编译器（APLS 用 Go 实现的二进制评估，本机已装 1.25.4）
