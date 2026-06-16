@@ -149,6 +149,23 @@ def eval_apls(dataset, target_dir, workers=None):
     if os.path.exists(go_bin_path):
         os.remove(go_bin_path)
 
+    # 报告 SKIP / Error 数, 避免"全 SKIP 静默出 0 分"的坑
+    skipped = [e for e in errors if e.startswith("SKIP:")]
+    failed = [e for e in errors if not e.startswith("SKIP:")]
+    if skipped:
+        print(f"⚠️  APLS: {len(skipped)} / {len(test_names)} samples SKIPPED (missing pred .p)")
+        if len(skipped) <= 3:
+            for s in skipped:
+                print(f"     {s}")
+        else:
+            for s in skipped[:3]:
+                print(f"     {s}")
+            print(f"     ... and {len(skipped) - 3} more")
+    if failed:
+        print(f"⚠️  APLS: {len(failed)} samples FAILED:")
+        for f in failed[:5]:
+            print(f"     {f}")
+
     # Compute final metric
     apls_vals = []
     output_apls = []
@@ -164,10 +181,15 @@ def eval_apls(dataset, target_dir, workers=None):
             output_apls.append([file_name, val])
 
     mean_apls = np.mean(apls_vals) if apls_vals else 0
-    print(f"APLS: {mean_apls:.8f}")
+    if not apls_vals:
+        print(f"⚠️  APLS: ALL samples missing or failed → mean = 0.0 is meaningless. "
+              f"Check that --dir points at a valid inference output (relative to project root).")
+    print(f"APLS: {mean_apls:.8f}  (computed on {len(apls_vals)} / {len(test_names)} samples)")
 
     with open(f"../{target_dir}/results/apls.json", "w") as jf:
-        json.dump({'apls': output_apls, 'final_APLS': mean_apls}, jf)
+        json.dump({'apls': output_apls, 'final_APLS': mean_apls,
+                   'n_evaluated': len(apls_vals), 'n_total': len(test_names),
+                   'n_skipped': len(skipped), 'n_failed': len(failed)}, jf)
 
     return True
 
@@ -254,6 +276,34 @@ if __name__ == "__main__":
                         help='Number of parallel workers (default: auto)')
 
     args = parser.parse_args()
+
+    # ---- Normalize --dir ----
+    # eval 内部统一加 ../ 前缀, 所以 --dir 必须是"相对项目根"的路径 (例如 save/xxx),
+    # 用户常见误传:
+    #   --dir ../save/xxx       (从 metrics/ 习惯加了 ../)
+    #   --dir save/xxx/         (尾部多余斜线)
+    #   --dir /abs/path/save/xxx (绝对路径)
+    # 自动剥掉这些, 失败则报错并退出, 避免静默 SKIP 全部样本而出 0 分。
+    raw = args.dir.rstrip('/')
+    if os.path.isabs(raw):
+        # 绝对路径 → 转成相对项目根
+        project_root = os.path.dirname(SCRIPT_DIR)
+        try:
+            raw = os.path.relpath(raw, project_root)
+        except ValueError:
+            print(f"Error: --dir must be inside project root, got: {args.dir}")
+            sys.exit(1)
+    while raw.startswith('../'):
+        raw = raw[3:]
+    # 验证 graph/ 子目录存在 (在 metrics/ cwd 下, eval 内部用 ../ 前缀)
+    expected = os.path.join('..', raw, 'graph')
+    if not os.path.isdir(expected):
+        print(f"Error: cannot find pred graphs at <project_root>/{raw}/graph/")
+        print(f"       --dir must be relative to project root (e.g. save/infer_xxx),")
+        print(f"       not relative to metrics/. Got: {args.dir}")
+        sys.exit(1)
+    args.dir = raw
+    print(f"Normalized --dir: {args.dir}")
 
     if args.metric in ('apls', 'all'):
         eval_apls(args.dataset, args.dir, args.workers)
