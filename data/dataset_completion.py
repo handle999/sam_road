@@ -54,7 +54,7 @@ def spacenet_data_partition():
 
 
 def didi_data_partition():
-    with open('./xian/2019_400/data_split.json', 'r') as jf:
+    with open('datasets/didi/xian/2019_400/data_split.json', 'r') as jf:
         data_list = json.load(jf)
     return data_list['train'], data_list['validation'], data_list['test']
 
@@ -489,7 +489,7 @@ class SatMapCompletionDataset(Dataset):
         self.modality_dropout_prob = getattr(config, 'MODALITY_DROPOUT_PROB', 0.2)
         self.traj_dropout_prob = getattr(config, 'TRAJ_DROPOUT_PROB', 0.2)
 
-        assert self.config.DATASET in {'cityscale', 'spacenet', 'didi'}
+        assert self.config.DATASET in {'cityscale', 'spacenet', 'didi', 'didi_xian'}
 
         if self.config.DATASET == 'cityscale':
             self.IMAGE_SIZE = 2048
@@ -515,17 +515,21 @@ class SatMapCompletionDataset(Dataset):
             train, val, test = spacenet_data_partition()
             coord_transform = lambda v: np.stack([v[:, 1], 400 - v[:, 0]], axis=1)
 
-        elif self.config.DATASET == 'didi':
+        elif self.config.DATASET == 'didi' or self.config.DATASET == 'didi_xian':
             self.IMAGE_SIZE = 400
             self.SAMPLE_MARGIN = 0
-            rgb_pattern = './xian/2019_400/xian_2019_400/region_{}_sat.png'
-            keypoint_mask_pattern = './xian/2019_400/processed/keypoint_mask_{}.png'
-            road_mask_pattern = './xian/2019_400/processed/road_mask_{}.png'
-            gt_graph_pattern = './xian/2019_400/region_{}_refine_gt_graph.p'
+            # 路径与 dataset.py 已修复的 didi_xian 分支保持一致 (相对项目根)
+            rgb_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_sat.png'
+            keypoint_mask_pattern = 'datasets/didi/xian/2019_400/processed/keypoint_mask_{}.png'
+            road_mask_pattern = 'datasets/didi/xian/2019_400/processed/road_mask_{}.png'
+            # gt_graph 文件在 xian_2019_400/ 子目录里, 不是 2019_400/ 顶层
+            gt_graph_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_refine_gt_graph.p'
             # Xian 有 traj: active.png 作为热力图
-            active_mask_pattern = './xian/2019_400/xian_2019_400/region_{}_active.png'
+            active_mask_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_active.png'
             train, val, test = didi_data_partition()
-            coord_transform = lambda v: v[:, ::-1]
+            # DiDi Xian 与 SpaceNet 同样使用 (y_up, x) 数学坐标系, 需要 swap+flip-y
+            # 注: 之前用 v[:, ::-1] 是 cityscale 风格, 对 xian 是错的 (会得到镜像图)
+            coord_transform = lambda v: np.stack([v[:, 1], 400 - v[:, 0]], axis=1)
 
         train_split = train + val
         test_split = test

@@ -99,7 +99,7 @@ def load_traj_heatmap(img_id, config):
     if args.traj_dir is None:
         return None
 
-    if config.DATASET == 'didi':
+    if config.DATASET == 'didi' or config.DATASET == 'didi_xian':
         traj_path = os.path.join(args.traj_dir, f'region_{img_id}_active.png')
     else:
         return None
@@ -501,9 +501,9 @@ if __name__ == "__main__":
     elif config.DATASET == 'spacenet':
         _, _, test_img_indices = spacenet_data_partition()
         rgb_pattern = './datasets/spacenet/RGB_1.0_meter/{}__rgb.png'
-    elif config.DATASET == 'didi':
+    elif config.DATASET == 'didi' or config.DATASET == 'didi_xian':
         _, _, test_img_indices = didi_data_partition()
-        rgb_pattern = './xian/2019_400/xian_2019_400/region_{}_sat.png'
+        rgb_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_sat.png'
 
     output_dir_prefix = './save/infer_completion_'
     if args.output_dir:
@@ -577,7 +577,7 @@ if __name__ == "__main__":
         cv2.imwrite(os.path.join(mask_save_dir, f'{img_id}_itsc.png'), itsc_mask)
 
         # 保存图
-        if config.DATASET == 'spacenet' or config.DATASET == 'didi':
+        if config.DATASET in ('spacenet', 'didi', 'didi_xian'):
             pred_nodes = np.stack([400 - pred_nodes[:, 0], pred_nodes[:, 1]], axis=1)
 
         if len(pred_nodes) > 0 and len(pred_edges) > 0:
