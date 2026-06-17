@@ -415,9 +415,12 @@ if __name__ == "__main__":
         if len(gt_nodes) == 0:
             gt_nodes = np.zeros([0, 2], dtype=np.float32)
 
-        if config.DATASET == "spacenet" or config.DATASET == "didi_xian" or config.DATASET == "xian":
-            # convert ??? -> xy -> rc
+        if config.DATASET == "spacenet":
+            # convert (y_up, x) -> xy -> rc
             gt_nodes = np.stack([gt_nodes[:, 1], 400 - gt_nodes[:, 0]], axis=1)
+            gt_nodes = gt_nodes[:, ::-1]
+        elif config.DATASET in ("didi_xian", "xian"):
+            # convert (row, col) -> rc (just swap)
             gt_nodes = gt_nodes[:, ::-1]
 
         # RGB already
@@ -460,8 +463,8 @@ if __name__ == "__main__":
         cv2.imwrite(os.path.join(viz_save_dir, f'{img_id}.png'), viz_img)
 
         # Saves the large map
-        if config.DATASET == "spacenet" or config.DATASET == "didi_xian" or config.DATASET == "xian":
-            # r, c -> ???
+        if config.DATASET == "spacenet":
+            # rc -> (y_up, x) for sat2graph format
             pred_nodes = np.stack([400 - pred_nodes[:, 0], pred_nodes[:, 1]], axis=1)
         large_map_sat2graph_format = graph_utils.convert_to_sat2graph_format(pred_nodes, pred_edges)
         graph_save_dir = os.path.join(output_dir, 'graph')

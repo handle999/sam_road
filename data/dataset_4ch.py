@@ -396,8 +396,8 @@ class SatMapDataset(Dataset):
             gt_graph_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_refine_gt_graph.p'
 
             train, val, test = didi_xian_data_partition()
-            # DiDi Xian uses (y_up, x) bottom-left coordinate format, same as SpaceNet
-            coord_transform = lambda v : np.stack([v[:, 1], 400 - v[:, 0]], axis=1)
+            # DiDi Xian uses (row, col) coordinate format, same as Cityscale (NOT SpaceNet's (y_up, x))
+            coord_transform = lambda v : v[:, ::-1]
 
         train_split = train + val
         test_split = test

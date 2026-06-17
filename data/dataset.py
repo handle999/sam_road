@@ -364,8 +364,8 @@ class SatMapDataset(Dataset):
 
             train, val, test = didi_xian_data_partition()
 
-            # DiDi Xian uses (y_up, x) bottom-left coordinate format, same as SpaceNet
-            coord_transform = lambda v : np.stack([v[:, 1], 400 - v[:, 0]], axis=1)
+            # DiDi Xian uses (row, col) coordinate format, same as Cityscale (NOT SpaceNet's (y_up, x))
+            coord_transform = lambda v : v[:, ::-1]
 
         self.is_train = is_train
 

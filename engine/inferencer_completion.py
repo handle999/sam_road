@@ -577,7 +577,8 @@ if __name__ == "__main__":
         cv2.imwrite(os.path.join(mask_save_dir, f'{img_id}_itsc.png'), itsc_mask)
 
         # 保存图
-        if config.DATASET in ('spacenet', 'didi', 'didi_xian'):
+        if config.DATASET == 'spacenet':
+            # rc -> (y_up, x) for sat2graph format
             pred_nodes = np.stack([400 - pred_nodes[:, 0], pred_nodes[:, 1]], axis=1)
 
         if len(pred_nodes) > 0 and len(pred_edges) > 0:

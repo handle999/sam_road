@@ -527,9 +527,8 @@ class SatMapCompletionDataset(Dataset):
             # Xian 有 traj: active.png 作为热力图
             active_mask_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_active.png'
             train, val, test = didi_data_partition()
-            # DiDi Xian 与 SpaceNet 同样使用 (y_up, x) 数学坐标系, 需要 swap+flip-y
-            # 注: 之前用 v[:, ::-1] 是 cityscale 风格, 对 xian 是错的 (会得到镜像图)
-            coord_transform = lambda v: np.stack([v[:, 1], 400 - v[:, 0]], axis=1)
+            # DiDi Xian uses (row, col) coordinate format, same as Cityscale (NOT SpaceNet's (y_up, x))
+            coord_transform = lambda v: v[:, ::-1]
 
         train_split = train + val
         test_split = test
