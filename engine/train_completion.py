@@ -95,9 +95,11 @@ if __name__ == "__main__":
         collate_fn=completion_graph_collate_fn,
     )
 
-    # ---- Checkpoint: 保存 val_loss 最小的 top-5 ----
+    # ---- Checkpoint: 按 DATASET 分目录, 避免不同数据集训练相互覆盖 ----
+    dataset_name = config.DATASET
+    ckpt_dir = f"checkpoints/samroad_completion_{dataset_name}/"
     checkpoint_callback = ModelCheckpoint(
-        dirpath="checkpoints/samroad_completion/",
+        dirpath=ckpt_dir,
         filename="completion-{epoch:02d}-{val_loss:.4f}",
         monitor="val_loss",
         every_n_epochs=1,
@@ -126,11 +128,12 @@ if __name__ == "__main__":
     log_dir = "train_logs"
     os.makedirs(log_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    text_log_callback = TextLogCallback(log_path=os.path.join(log_dir, f"samroad_completion_spacenet_{timestamp}.txt"))
+    text_log_path = os.path.join(log_dir, f"samroad_completion_{dataset_name}_{timestamp}.txt")
+    text_log_callback = TextLogCallback(log_path=text_log_path)
     callbacks.append(text_log_callback)
 
     # 写运行元信息: ckpt 目录 + train_logs/ 各放一份
-    ckpt_dir = "checkpoints/samroad_completion/"
+    # 注意 ckpt_dir 已在上面 ModelCheckpoint 处按 dataset_name 定义, 这里复用
     os.makedirs(ckpt_dir, exist_ok=True)
     run_info_path = dump_run_info(
         output_dir=ckpt_dir,
@@ -138,7 +141,7 @@ if __name__ == "__main__":
         args=args,
         config_source=args.config,
         extra={'task': 'train', 'model': 'sam_road_completion',
-               'text_log': os.path.join(log_dir, f"samroad_completion_spacenet_{timestamp}.txt")},
+               'text_log': text_log_path},
         filename=f'run_info_{timestamp}.yaml',
     )
     dump_run_info(
