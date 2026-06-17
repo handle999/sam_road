@@ -516,6 +516,63 @@ python scripts/visualize_dataset.py --dataset cityscale
 python scripts/visualize_dataset.py --dataset spacenet
 ```
 
+### 阈值标定（PR 曲线自动选取）
+
+推理时有三个后处理阈值决定最终图的质量，它们都作用在**模型输出的概率**上：
+
+| 阈值 | 作用对象 | 影响 |
+|------|---------|------|
+| `ITSC_THRESHOLD` | 关键点（交叉口）mask | 节点生成数量，阈值高→节点少→Recall 上限低 |
+| `ROAD_THRESHOLD` | 路网 mask | 节点生成数量，同上 |
+| `TOPO_THRESHOLD` | TopoNet 边分数 | 边保留数量，阈值高→边少→Recall 低 |
+
+**这三个阈值是数据集相关的**，不能跨数据集共用。SpaceNet 上调出来的 `0.195 / 0.341 / 0.705` 直接用到 DiDi Xian 上会导致 Recall 偏低（Precision 高、Recall 低，典型的"预测过保守"）。
+
+#### 原理：一次 PR 曲线 + argmax F1
+
+阈值标定**不需要**逐个阈值跑全量推理，也**不是**二分查找。机制藏在模型的 `on_test_end`（[models/sam_road.py](models/sam_road.py) / [models/sam_road_completion.py](models/sam_road_completion.py)）：
+
+1. 用 torchmetrics 的 `BinaryPrecisionRecallCurve` 在**验证集 patch 级别**收集所有预测分数 + GT 标签
+2. `.compute()` **一次性**返回完整 PR 曲线（所有阈值下的 precision/recall）——内部是对预测分数排序后累积 TP/FP，O(N log N) 一次，不是 O(N×K)
+3. 取 `F1 = 2PR/(P+R)` 最大的那个阈值
+
+因为评估在 **256×256 patch 级**（像素/边二分类）而非全图 APLS/TOPO，所以一次验证几分钟就出全部三个阈值。patch 级最优阈值 ≈ 全图最优，原始项目在 SpaceNet 上验证过这套够用（patch 级 0.705 对应全图 TOPO≈0.8）。
+
+#### 用法
+
+**SAM-Road（原始模型）** —— `engine/test.py`：
+
+```bash
+cd /home/hanhaoyu/sam_road
+CUDA_VISIBLE_DEVICES=0 python -m engine.test \
+    --config config/toponet_vitb_256_xian.yaml \
+    --checkpoint "checkpoints/samroad_didi_xian/<best.ckpt>"
+```
+
+**SAM-Road Completion（补全模型）** —— `engine/test_completion.py`：
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python -m engine.test_completion \
+    --config config/toponet_vitb_256_xian_completion.yaml \
+    --checkpoint "checkpoints/samroad_completion_didi_xian/<best.ckpt>"
+```
+
+两者运行结束都会打印三行：
+
+```
+======= Finding best thresholds =======
+======= keypoint ======
+Best threshold 0.1949462890625, P=0.3438 R=0.3268 F1=0.3351   → ITSC_THRESHOLD
+======= road ======
+Best threshold 0.3408203125, P=0.6585 R=0.7146 F1=0.6854      → ROAD_THRESHOLD
+======= topo ======
+Best threshold 0.705078125, P=0.9747 R=0.9701 F1=0.9724       → TOPO_THRESHOLD
+```
+
+把这三个值抄进对应 config 的 `ITSC_THRESHOLD / ROAD_THRESHOLD / TOPO_THRESHOLD`，重新推理评估即可。config 文件里 `# Best threshold ...` 形式的注释就是这么来的（每个数据集标定一次）。
+
+> 注：patch 级 PR 曲线选出的阈值是像素/边二分类意义下的最优，与全图 APLS/TOPO 正相关但不完全等价。若标定后全图指标仍不理想，可在该阈值附近手动微调（通常 ±0.1 内）观察 APLS/TOPO 变化。
+
 ---
 
 ## 预训练权重
