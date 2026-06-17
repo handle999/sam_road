@@ -22,8 +22,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
+def canonical_dataset(dataset):
+    """Normalize legacy aliases to explicit dataset names."""
+    # 历史上 metrics 用 didi 表示 Xian；现在项目 config 统一用 didi_xian，
+    # 预留 didi_chengdu 等未来数据集，因此内部 canonical 一律使用 didi_xian。
+    return 'didi_xian' if dataset == 'didi' else dataset
+
+
 def load_dataset_config(dataset):
     """Load dataset-specific configuration."""
+    dataset = canonical_dataset(dataset)
     config_path = os.path.join(SCRIPT_DIR, 'configs', f'{dataset}.yaml')
     if os.path.exists(config_path):
         import yaml
@@ -34,13 +42,14 @@ def load_dataset_config(dataset):
 
 def get_test_indices(dataset):
     """Get test image indices for the given dataset."""
+    dataset = canonical_dataset(dataset)
     if dataset == 'cityscale':
         return [8, 9, 19, 28, 29, 39, 48, 49, 59, 68, 69, 79, 88, 89, 99,
                 108, 109, 119, 128, 129, 139, 148, 149, 159, 168, 169, 179]
     elif dataset == 'spacenet':
         with open('../datasets/spacenet/data_split.json', 'r') as f:
             return json.load(f).get('test', [])
-    elif dataset == 'didi':
+    elif dataset == 'didi_xian':
         with open('../datasets/didi/xian/2019_400/data_split.json', 'r') as f:
             return json.load(f).get('test', [])
     else:
@@ -49,6 +58,7 @@ def get_test_indices(dataset):
 
 def eval_apls(dataset, target_dir, workers=None):
     """Run APLS evaluation."""
+    dataset = canonical_dataset(dataset)
     print(f"\n{'='*60}")
     print(f"  APLS Evaluation | Dataset: {dataset} | Dir: {target_dir}")
     print(f"{'='*60}")
@@ -79,7 +89,7 @@ def eval_apls(dataset, target_dir, workers=None):
         gt_pattern = '../datasets/cityscale/20cities/region_{}_graph_gt.pickle'
     elif dataset == 'spacenet':
         gt_pattern = '../datasets/spacenet/RGB_1.0_meter/{}__gt_graph.p'
-    elif dataset == 'didi':
+    elif dataset == 'didi_xian':
         gt_pattern = '../datasets/didi/xian/2019_400/xian_2019_400/region_{}_graph_gt.pickle'
 
     if workers is None:
@@ -205,6 +215,7 @@ def eval_apls(dataset, target_dir, workers=None):
 
 def eval_topo(dataset, target_dir, workers=None):
     """Run TOPO evaluation."""
+    dataset = canonical_dataset(dataset)
     print(f"\n{'='*60}")
     print(f"  TOPO Evaluation | Dataset: {dataset} | Dir: {target_dir}")
     print(f"{'='*60}")
@@ -275,8 +286,8 @@ def eval_topo(dataset, target_dir, workers=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Unified metric evaluation for SAM-Road")
-    parser.add_argument('--dataset', choices=['cityscale', 'spacenet', 'didi'], required=True,
-                        help='Dataset type')
+    parser.add_argument('--dataset', choices=['cityscale', 'spacenet', 'didi_xian', 'didi'], required=True,
+                        help="Dataset type ('didi' is a legacy alias of 'didi_xian')")
     parser.add_argument('--dir', required=True,
                         help='Output directory (relative to project root, e.g. save/xxx)')
     parser.add_argument('--metric', choices=['apls', 'topo', 'all'], default='all',
@@ -285,6 +296,9 @@ if __name__ == "__main__":
                         help='Number of parallel workers (default: auto)')
 
     args = parser.parse_args()
+    if args.dataset == 'didi':
+        print("[WARN] dataset='didi' is deprecated; use 'didi_xian' instead.")
+        args.dataset = 'didi_xian'
 
     # ---- Normalize --dir ----
     # eval 内部统一加 ../ 前缀, 所以 --dir 必须是"相对项目根"的路径 (例如 save/xxx),

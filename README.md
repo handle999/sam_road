@@ -440,6 +440,9 @@ CUDA_VISIBLE_DEVICES=1 python -m engine.inferencer_completion \
 
 **用法**（必须 `cd metrics/` 再跑，eval.py 内部用大量 `../datasets/...` 相对路径）：
 
+支持的数据集名：`cityscale` / `spacenet` / `didi_xian`。
+历史别名 `didi` 仍可用，但已不推荐；统一使用 `didi_xian`，避免未来加入 `didi_chengdu` 时混淆。
+
 ```bash
 cd /home/hanhaoyu/sam_road/metrics
 conda activate SAM
@@ -447,6 +450,11 @@ conda activate SAM
 # 一次跑两个指标 (默认), --workers 视机器核数, 16~32 比较合适
 python eval.py --dataset spacenet \
                --dir save/infer_<timestamp> \
+               --workers 16
+
+# Xian / DiDi Xian
+python eval.py --dataset didi_xian \
+               --dir save/infer_completion_didi_xian_<timestamp> \
                --workers 16
 
 # 只跑其中一个

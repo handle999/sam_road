@@ -74,7 +74,7 @@ def process_single_tile(tile_idx, savedir, interval, matching_threshold, dataset
         graph_gt_path = f'../datasets/cityscale/20cities/region_{tile_idx}_graph_gt.pickle'
     elif dataset == 'spacenet':
         graph_gt_path = f'../datasets/spacenet/RGB_1.0_meter/{tile_idx}__gt_graph.p'
-    elif dataset == 'didi':
+    elif dataset == 'didi_xian':
         graph_gt_path = f'../datasets/didi/xian/2019_400/xian_2019_400/region_{tile_idx}_graph_gt.pickle'
     else:
         return f"ERROR: unknown dataset '{dataset}'"
@@ -128,9 +128,12 @@ if __name__ == '__main__':
     parser.add_argument('-matching_threshold', type=float, default=0.00010)
     parser.add_argument('-interval', type=float, default=0.00005)
     parser.add_argument('-dataset', type=str, default='spacenet',
-                        choices=['cityscale', 'spacenet', 'didi'],
-                        help='Dataset type, must match training/inference config')
+                        choices=['cityscale', 'spacenet', 'didi_xian', 'didi'],
+                        help="Dataset type; 'didi' is legacy alias of 'didi_xian'")
     args = parser.parse_args()
+    if args.dataset == 'didi':
+        print("[WARN] dataset='didi' is deprecated; use 'didi_xian' instead.")
+        args.dataset = 'didi_xian'
 
     out_dir = f'../{args.savedir}/results/topo'
     os.makedirs(out_dir, exist_ok=True)
@@ -148,7 +151,7 @@ if __name__ == '__main__':
     elif args.dataset == 'spacenet':
         with open('../datasets/spacenet/data_split.json', 'r') as jf:
             tile_list = json.load(jf)['test']
-    elif args.dataset == 'didi':
+    elif args.dataset == 'didi_xian':
         with open('../datasets/didi/xian/2019_400/data_split.json', 'r') as jf:
             tile_list = json.load(jf)['test']
     else:

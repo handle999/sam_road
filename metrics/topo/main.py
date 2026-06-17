@@ -28,13 +28,16 @@ parser.add_argument('-interval', action='store', dest='topo_interval', type=floa
 parser.add_argument('-savedir', type=str, required=True)
 
 parser.add_argument('-dataset', type=str, default='spacenet',
-                    choices=['cityscale', 'spacenet', 'didi'],
-                    help='dataset type to determine path patterns and parameters')
+                    choices=['cityscale', 'spacenet', 'didi_xian', 'didi'],
+                    help="dataset type to determine path patterns; 'didi' is legacy alias of 'didi_xian'")
 
 parser.add_argument('-topo_radius', type=float, default=None,
                     help='TOPO propagation radius (default: 0.0015 for spacenet, 0.003 for cityscale)')
 
 args = parser.parse_args()
+if args.dataset == 'didi':
+    print("[WARN] dataset='didi' is deprecated; use 'didi_xian' instead.")
+    args.dataset = 'didi_xian'
 print(args)
 
 # Dataset-specific configuration
@@ -50,7 +53,7 @@ elif args.dataset == 'spacenet':
     gt_pattern = '../datasets/spacenet/RGB_1.0_meter/{}__gt_graph.p'
     pred_pattern = '../{savedir}/graph/{idx}.p'
     topo_r = args.topo_radius if args.topo_radius else 0.0015
-elif args.dataset == 'didi':
+elif args.dataset == 'didi_xian':
     with open('../datasets/didi/xian/2019_400/data_split.json', 'r') as jf:
         test_indices = json.load(jf)['test']
     gt_pattern = '../datasets/didi/xian/2019_400/xian_2019_400/region_{}_graph_gt.pickle'
