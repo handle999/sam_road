@@ -106,7 +106,8 @@ sam_road/
 │   ├── 数据集与坐标系分析.md   # 坐标系详细分析
 │   ├── 方案B_路网补全设计.md   # 补全模型设计文档
 │   ├── Train.md                # 训练流程详解
-│   ├── nan_fix_completion.md  # 补全模型 fp16 NaN 修复总结
+│   ├── nan_fix_completion.md   # 补全模型 fp16 NaN 修复总结
+│   ├── experiment_metrics_20260617.md # 已完成推理/metric 实验汇总
 │   ├── README_original_en.md  # 原始英文 README
 │   └── imgs/                  # 验证图片（已入库）
 ├── engine/            # 训练 & 推理
