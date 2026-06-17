@@ -265,15 +265,15 @@ if __name__ == "__main__":
     elif config.DATASET in ('xian', 'didi_xian'):
         # def spacenet_data_partition():
         # dataset partition
-        with open('datasets/didi/xian/data_split.json','r') as jf:
+        with open('datasets/didi/xian/2019_400/data_split.json','r') as jf:
             import json
             data_list = json.load(jf)
             train_img_indices = data_list['train']
             val_img_indices = data_list['validation']
             test_img_indices = data_list['test']
 
-        rgb_pattern = 'datasets/didi/xian/RGB/region_{}_sat.png'
-        gt_graph_pattern = 'datasets/didi/xian/RGB/region_{}_graph_gt.pickle'
+        rgb_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_sat.png'
+        gt_graph_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_graph_gt.pickle'
     
     output_dir_prefix = './save/infer_'
     if args.output_dir:
