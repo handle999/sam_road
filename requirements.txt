@@ -27,7 +27,6 @@
 lightning==2.2.1
 pytorch-lightning==2.2.1
 torchmetrics>=1.0
-wandb>=0.15
 tensorboard>=2.15
 
 # ---- Computer Vision & Image ----

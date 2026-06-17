@@ -57,7 +57,7 @@ pip install torch-geometric==2.4.0
 
 ```bash
 pip install lightning==2.2.1 pytorch-lightning==2.2.1 \
-    "torchmetrics>=1.0" "wandb>=0.15" "tensorboard>=2.15" \
+    "torchmetrics>=1.0" "tensorboard>=2.15" \
     "opencv-python>=4.8,<4.10" "Pillow>=10.0" "imageio>=2.31" \
     "scikit-image>=0.21" "numpy>=1.24,<2.0" "scipy>=1.11" \
     "scikit-learn>=1.3" "igraph>=0.11" "rtree>=1.1" "shapely>=2.0" \

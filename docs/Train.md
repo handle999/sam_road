@@ -215,7 +215,7 @@ print('Global step:', ckpt.get('global_step'))
 
 ## 日志系统
 
-训练过程有三种日志输出，全部**无需 wandb/VPN**：
+训练过程有三种日志输出，全部**无需 VPN**：
 
 ### 1. 文本日志 (TextLogCallback)
 
@@ -279,10 +279,9 @@ python engine/train_completion.py \
 - 已修复：`topo_loss` 分母加 epsilon (`1e-8`)，`topo_logits` 加 clamp (`-16, 16`) 防止 fp16 BCE 溢出
 - 若仍出现，尝试 `--precision 32` 用 fp32 训练
 
-### Q: wandb 报错
+### Q: 是否需要 wandb
 
-- 已完全移除 wandb 依赖，使用 CSVLogger 替代
-- 如需 wandb 图像日志，可单独安装 wandb 并用 WandbLogger 替换 CSVLogger
+- 本项目**不依赖 wandb**，训练日志全部使用 CSVLogger 写入本地文件，无需 VPN/账号
 
 ### Q: 多卡训练
 

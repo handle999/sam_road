@@ -9,7 +9,7 @@ v2 变更:
   - 动态 keep_ratio (U[0.2, 0.8])
   - 每个 epoch 刷新已知图 (重新随机删边)
   - EarlyStopping + Best-5 Checkpoint
-  - CSVLogger 替代 wandb (无 VPN 也能正常训练)
+  - CSVLogger 日志 (无 VPN 也能正常训练)
   - TextLogCallback 实时写 txt 日志
 """
 
@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
     callbacks.append(CompletionRefreshCallback())
 
-    # ---- CSVLogger (替代 wandb, 无需联网) ----
+    # ---- CSVLogger (无需联网) ----
     csv_logger = CSVLogger(save_dir="train_logs", name="csv_completion", flush_logs_every_n_steps=10)
 
     # ---- TextLogCallback: 实时写 txt 日志 ----
