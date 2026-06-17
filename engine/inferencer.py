@@ -262,7 +262,7 @@ if __name__ == "__main__":
         _, _, test_img_indices = spacenet_data_partition()
         rgb_pattern = './datasets/spacenet/RGB_1.0_meter/{}__rgb.png'
         gt_graph_pattern = './datasets/spacenet/RGB_1.0_meter/{}__gt_graph.p'
-    elif config.DATASET == 'xian':
+    elif config.DATASET in ('xian', 'didi_xian'):
         # def spacenet_data_partition():
         # dataset partition
         with open('datasets/didi/xian/data_split.json','r') as jf:
