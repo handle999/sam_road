@@ -843,11 +843,17 @@ class SAMRoadCompletion(pl.LightningModule):
         def find_best_threshold(pr_curve_metric, category):
             print(f'======= {category} ======')
             precision, recall, thresholds = pr_curve_metric.compute()
-            f1_scores = 2 * (precision * recall) / (precision + recall)
-            best_threshold_index = torch.argmax(f1_scores)
+            if thresholds.numel() == 0:
+                print(f'Best threshold N/A (无有效样本或全被 ignore), P={precision} R={recall} F1=N/A')
+                return
+            p = precision[:len(thresholds)]
+            r = recall[:len(thresholds)]
+            f1_scores = 2 * (p * r) / (p + r)
+            f1_safe = torch.nan_to_num(f1_scores, nan=-1.0)
+            best_threshold_index = int(torch.argmax(f1_safe))
             best_threshold = thresholds[best_threshold_index]
-            best_precision = precision[best_threshold_index]
-            best_recall = recall[best_threshold_index]
+            best_precision = p[best_threshold_index]
+            best_recall = r[best_threshold_index]
             best_f1 = f1_scores[best_threshold_index]
             print(f'Best threshold {best_threshold}, P={best_precision} R={best_recall} F1={best_f1}')
 

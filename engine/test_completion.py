@@ -48,6 +48,9 @@ parser.add_argument(
 parser.add_argument(
     "--precision", default=32, help="32 or 16 (默认 32, 与训练一致; completion 模型在 fp16 下 GNN/MHA 易产 NaN 导致 mask 通道异常)"
 )
+parser.add_argument(
+    "--device", default="auto", help="auto / cpu / gpu (Mac MPS 兼容性差, 可用 cpu 强制 CPU)"
+)
 
 
 if __name__ == "__main__":
@@ -75,12 +78,18 @@ if __name__ == "__main__":
     checkpoint_callback = ModelCheckpoint(every_n_epochs=1, save_top_k=-1)
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
-    trainer = pl.Trainer(
+    trainer_kwargs = dict(
         max_epochs=config.TRAIN_EPOCHS,
         check_val_every_n_epoch=1,
         num_sanity_val_steps=2,
         callbacks=[checkpoint_callback, lr_monitor],
         precision=args.precision,
     )
+    if args.device == "cpu":
+        trainer_kwargs.update(accelerator="cpu", devices=1)
+    elif args.device == "gpu":
+        trainer_kwargs.update(accelerator="gpu")
+
+    trainer = pl.Trainer(**trainer_kwargs)
 
     trainer.test(net, dataloaders=val_loader, ckpt_path=args.checkpoint)
