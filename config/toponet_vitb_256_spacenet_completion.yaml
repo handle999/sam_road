@@ -33,6 +33,13 @@ INFER_BATCH_SIZE: 32
 SAMPLE_MARGIN: 0
 INFER_PATCHES_PER_EDGE: 16
 
+# ======= Finding best thresholds ======
+# ======= keypoint ======
+# Best threshold 0.98583984375, P=0.0 R=0.0 F1=nan
+# ======= road ======
+# Best threshold 0.35693359375, P=0.6536603569984436 R=0.7091116905212402 F1=0.6802579164505005
+# ======= topo ======
+# Best threshold 0.70361328125, P=0.9638870358467102 R=0.9686092138290405 F1=0.9662423133850098
 # Thresholds
 ITSC_THRESHOLD: 0.195
 ROAD_THRESHOLD: 0.341

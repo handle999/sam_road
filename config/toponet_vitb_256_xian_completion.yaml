@@ -41,6 +41,13 @@ INFER_BATCH_SIZE: 32
 SAMPLE_MARGIN: 0
 INFER_PATCHES_PER_EDGE: 16
 
+# ======= Finding best thresholds ======
+# ======= keypoint ======
+# Best threshold 0.77685546875, P=0.0 R=0.0 F1=nan
+# ======= road ======
+# Best threshold 0.98828125, P=0.0 R=0.0 F1=nan
+# ======= topo ======
+# Best threshold 0.71044921875, P=0.958838939666748 R=0.952387809753418 F1=0.9556024670600891
 # Thresholds  (TODO: 训完后用 PR 曲线 sweep 出更优阈值, 当前先沿用 spacenet 默认)
 ITSC_THRESHOLD: 0.195
 ROAD_THRESHOLD: 0.341
