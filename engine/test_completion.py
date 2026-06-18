@@ -46,7 +46,7 @@ parser.add_argument(
     "--checkpoint", default=None, help="checkpoint of the model to test."
 )
 parser.add_argument(
-    "--precision", default=16, help="32 or 16"
+    "--precision", default=32, help="32 or 16 (默认 32, 与训练一致; completion 模型在 fp16 下 GNN/MHA 易产 NaN 导致 mask 通道异常)"
 )
 
 

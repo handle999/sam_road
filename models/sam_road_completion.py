@@ -830,6 +830,9 @@ class SAMRoadCompletion(pl.LightningModule):
         topo_gt = batch['connected'].to(torch.int32)
         valid_int = valid.to(torch.int32)
 
+        # NaN 防御: 与 validation_step 保持一致, fp16 下 GNN/MHA 偶尔产 NaN 会污染 PR 曲线
+        # (尤其 keypoint 通道正样本极稀疏, 少量 NaN 即可使 PR 退化为 P=0 R=0)
+        mask_scores = torch.nan_to_num(mask_scores, nan=0.0, posinf=1.0, neginf=0.0)
         self.keypoint_pr_curve.update(mask_scores[..., 0], keypoint_mask.to(torch.int32))
         self.road_pr_curve.update(mask_scores[..., 1], road_mask.to(torch.int32))
 

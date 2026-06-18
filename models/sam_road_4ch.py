@@ -627,6 +627,8 @@ class SAMRoad(pl.LightningModule):
 
         topo_gt, topo_loss_mask = batch['connected'].to(torch.int32), valid.to(torch.float32)
 
+        # NaN 防御: fp16 下偶发 NaN 会污染 PR 曲线 (keypoint 正样本极稀疏时尤为敏感)
+        mask_scores = torch.nan_to_num(mask_scores, nan=0.0, posinf=1.0, neginf=0.0)
         self.keypoint_pr_curve.update(mask_scores[..., 0], keypoint_mask.to(torch.int32))
         self.road_pr_curve.update(mask_scores[..., 1], road_mask.to(torch.int32))
         

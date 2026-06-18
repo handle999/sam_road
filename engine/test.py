@@ -31,7 +31,7 @@ parser.add_argument(
     "--checkpoint", default=None, help="checkpoint of the model to test."
 )
 parser.add_argument(
-    "--precision", default=16, help="32 or 16"
+    "--precision", default=32, help="32 or 16 (默认 32, 与训练一致)"
 )
 
 
