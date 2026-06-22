@@ -1,0 +1,39 @@
+script: engine/train_completion.py
+start_time: '2026-06-16 20:25:27'
+end_time: null
+duration_seconds: null
+host: debian
+output_dir: /home/hanhaoyu/sam_road/checkpoints/samroad_completion
+config_source: config/toponet_vitb_256_spacenet_completion.yaml
+checkpoint: null
+command: /home/hanhaoyu/miniconda3/envs/SAM/bin/python engine/train_completion.py
+  --config config/toponet_vitb_256_spacenet_completion.yaml --precision 32 --gpus
+  1
+cli_args:
+  config: config/toponet_vitb_256_spacenet_completion.yaml
+  resume: null
+  precision: '32'
+  patience: 0
+  fast_dev_run: false
+  dev_run: false
+  gpus: '1'
+env:
+  cuda_visible_devices: <all>
+  omp_num_threads: <not set>
+  mkl_num_threads: <not set>
+  ld_preload: /home/hanhaoyu/miniconda3/envs/SAM/lib/libstdc++.so.6
+  conda_env: SAM
+  python_version: 3.10.19
+  platform: Linux-6.1.0-42-amd64-x86_64-with-glibc2.36
+git:
+  commit: d61cf38
+  branch: main
+  dirty: false
+torch:
+  torch_version: 2.1.2+cu121
+  cuda_available: true
+  cuda_device_count: 8
+  cuda_version: '12.1'
+task: train
+model: sam_road_completion
+text_log: train_logs/samroad_completion_spacenet_20260616_202527.txt

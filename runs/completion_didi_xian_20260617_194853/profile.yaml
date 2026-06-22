@@ -1,0 +1,26 @@
+run_id: completion_didi_xian_20260617_194853
+task: completion
+dataset: didi_xian
+created_at: '20260617_194853'
+migrated_from: checkpoints/samroad_completion_didi_xian
+config_source: config/toponet_vitb_256_xian_completion.yaml
+config_snapshot: null
+steps_requested:
+- train
+- infer
+- eval
+paths:
+  run_root: runs/completion_didi_xian_20260617_194853
+  train_dir: runs/completion_didi_xian_20260617_194853/train
+  ckpt_dir: runs/completion_didi_xian_20260617_194853/train/checkpoints
+  infer_dir: runs/completion_didi_xian_20260617_194853/infer
+  eval_dir: runs/completion_didi_xian_20260617_194853/eval
+  profile: runs/completion_didi_xian_20260617_194853/profile.yaml
+  best_ckpt: runs/completion_didi_xian_20260617_194853/best_ckpt.txt
+git:
+  commit: d52ab8e
+  branch: main
+  dirty: true
+step_status:
+  train: done (migrated)
+note: 由 migrate_ckpts_to_runs.py 从旧 checkpoints/ 迁移而来

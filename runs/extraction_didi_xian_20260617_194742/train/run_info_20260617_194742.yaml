@@ -1,0 +1,38 @@
+script: engine/train.py
+start_time: '2026-06-17 19:47:42'
+end_time: '2026-06-17 23:15:49'
+duration_seconds: 12487.88
+host: debian
+output_dir: /home/hanhaoyu/sam_road/checkpoints/samroad_didi_xian
+config_source: config/toponet_vitb_256_xian.yaml
+checkpoint: null
+command: /home/hanhaoyu/miniconda3/envs/SAM/bin/python engine/train.py --config config/toponet_vitb_256_xian.yaml
+  --precision 32 --gpus 1
+cli_args:
+  patience: 0
+  config: config/toponet_vitb_256_xian.yaml
+  resume: null
+  precision: '32'
+  fast_dev_run: false
+  dev_run: false
+  gpus: '1'
+env:
+  cuda_visible_devices: <all>
+  omp_num_threads: <not set>
+  mkl_num_threads: <not set>
+  ld_preload: /home/hanhaoyu/miniconda3/envs/SAM/lib/libstdc++.so.6
+  conda_env: SAM
+  python_version: 3.10.19
+  platform: Linux-6.1.0-42-amd64-x86_64-with-glibc2.36
+git:
+  commit: a8c8fbb
+  branch: main
+  dirty: false
+torch:
+  torch_version: 2.1.2+cu121
+  cuda_available: true
+  cuda_device_count: 8
+  cuda_version: '12.1'
+task: train
+model: sam_road
+text_log: train_logs/samroad_didi_xian_20260617_194742.txt
