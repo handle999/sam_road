@@ -118,17 +118,19 @@ sam_road/
 │   ├── sam_road.py            # 原始模型
 │   ├── sam_road_4ch.py        # 4通道模型
 │   └── sam_road_completion.py # 补全模型
-├── outputs/           # 生成物（gitignore）
-│   ├── experiments/   # 实验参数 CSV
-│   ├── logs/          # 训练/评估日志
-│   └── viz/           # 可视化图片
+├── outputs/           # 早期生成物（gitignore）
 ├── postprocess/       # 图提取、triage
 ├── scripts/           # 验证 & 可视化脚本
 ├── sam/               # SAM 子模块
-├── tools/             # 工具集 (config_utils, run_info, plot_loss, param_exps ...)
-│   ├── config_utils.py        # load_config / 输出目录创建
-│   └── run_info.py            # 训练/推理 run_info.yaml dumper (复现用)
+├── tools/             # 工具集
+│   ├── config_utils.py        # load_config / run_root 路径 / profile / best ckpt
+│   ├── registry.py            # TASKS/DATASETS 注册表 (run.py 用)
+│   ├── run_info.py            # run_info.yaml dumper (复现用)
+│   └── migrate_ckpts_to_runs.py # 旧 checkpoints/ → runs/ 迁移
 ├── metrics/           # APLS & TOPO 评估
+├── run.py             # 🆕 实验编排入口 (train+infer+eval 一条命令)
+├── batch.yaml         # 🆕 四任务批量配置
+├── runs/              # 🆕 实验产物根目录 (每个 run_id 一个子目录, gitignore 大产物)
 ├── conda_only.yml
 ├── myenv.yml
 └── pip_requirements.txt
@@ -237,6 +239,15 @@ cd datasets/cityscale && python generate_labels.py
 
 ### 训练
 
+> **推荐：用 `run.py` 编排**（统一 train+infer+eval，路径自动隔离，详见 [docs/实验编排方案设计.md](docs/实验编排方案设计.md)）
+> ```bash
+> # 单个全流程
+> python run.py --task completion --dataset spacenet --gpus 0
+> # 四任务批量 (spacenet→GPU0, didi_xian→GPU1)
+> python run.py --batch batch.yaml --parallel
+> ```
+> 下方为底层脚本直调（`--run-root` 可选，不给则走老路径）。
+
 ```bash
 # 原始模型
 python engine/train.py --config=config/toponet_vitb_512_cityscale.yaml
@@ -340,7 +351,14 @@ python engine/train_completion.py --config=config/toponet_vitb_256_spacenet_comp
 
 ### 推理
 
-三个 inferencer 都把结果写到 `./save/<前缀>_<timestamp>/`，目录结构一致：
+> **推荐：用 `run.py` 编排**（ckpt 自动选 best，输出走 `runs/{id}/infer/`）
+> ```bash
+> # 复用已有训练, 只跑 infer+eval (ckpt 自动选 best)
+> python run.py --task completion --dataset spacenet \
+>     --run-id completion_spacenet_20260616_202527 --steps infer,eval --resume-run
+> ```
+
+三个 inferencer 都支持 `--run-root`（走 `runs/{id}/infer/`）和 `--checkpoint auto`（自动选 best）。不给 `--run-root` 时走老路径 `./save/<前缀>_<timestamp>/`，目录结构一致：
 
 ```
 save/<前缀>_<timestamp>/
@@ -545,7 +563,7 @@ python scripts/visualize_dataset.py --dataset spacenet
 ```bash
 cd /home/hanhaoyu/sam_road
 CUDA_VISIBLE_DEVICES=0 python -m engine.test \
-    --config config/toponet_vitb_256_xian.yaml \
+    --config config/toponet_vitb_256_didi_xian.yaml \
     --checkpoint "checkpoints/samroad_didi_xian/<best.ckpt>"
 ```
 
@@ -553,7 +571,7 @@ CUDA_VISIBLE_DEVICES=0 python -m engine.test \
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python -m engine.test_completion \
-    --config config/toponet_vitb_256_xian_completion.yaml \
+    --config config/toponet_vitb_256_didi_xian_completion.yaml \
     --checkpoint "checkpoints/samroad_completion_didi_xian/<best.ckpt>"
 ```
 
