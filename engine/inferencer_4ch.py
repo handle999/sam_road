@@ -28,6 +28,8 @@ parser = ArgumentParser()
 parser.add_argument(
     "--checkpoint", default=None, help="checkpoint of the model to test."
 )
+parser.add_argument("--run-root", default=None,
+    help="编排层注入: 若提供, 输出写到 {run-root}/infer/ 下; 否则走 save/ 老路径 (或 --exp_id)")
 parser.add_argument(
     "--config", default=None, help="model config."
 )
@@ -211,7 +213,7 @@ def infer_one_img(net, img, config):
         # [B, D, h, w]
         batch_features = img_features[batch_index]
         # [B, N_sample, N_pair, 2]
-        batch_points = torch.tensor(collated['points'], device=args.device)
+        batch_points = torch.tensor(collated['points'], dtype=torch.float32, device=args.device)
         batch_pairs = torch.tensor(collated['pairs'], device=args.device)
         batch_valid = torch.tensor(collated['valid'], device=args.device)
 
@@ -269,7 +271,17 @@ if __name__ == "__main__":
     if args.max_nbr_q is not None:   config.MAX_NEIGHBOR_QUERIES = args.max_nbr_q
 
     # [=== 修改 2：确定输出目录与初始化日志 ===]
-    if args.exp_id:
+    # 输出目录: 优先 run-root 统一目录, 其次 --exp_id, 最后老 save/ 路径
+    if args.run_root:
+        run_id = os.path.basename(args.run_root.rstrip('/'))
+        from tools.config_utils import ensure_run_dirs
+        rp = ensure_run_dirs(run_id)
+        output_dir = rp['infer_dir']
+        os.makedirs(output_dir, exist_ok=True)
+        import yaml as _yaml
+        with open(os.path.join(output_dir, 'config.yaml'), 'w') as _f:
+            _yaml.dump(config.to_dict(), _f)
+    elif args.exp_id:
         output_dir = os.path.join('./save', args.exp_id)
         os.makedirs(output_dir, exist_ok=True)
         # 存一份当前实验实际使用的 config 副本，防止以后忘了参数
@@ -284,13 +296,27 @@ if __name__ == "__main__":
         else:
             output_dir = create_output_dir_and_save_config(output_dir_prefix, config)
 
+    # load checkpoint 路径 (支持 auto: 从 run-root 的 train 目录自动选 best)
+    ckpt_path = args.checkpoint
+    if ckpt_path == 'auto':
+        if not args.run_root:
+            raise SystemExit("--checkpoint auto 需要 --run-root")
+        from tools.config_utils import get_best_ckpt
+        _run_id = os.path.basename(args.run_root.rstrip('/'))
+        ckpt_path = get_best_ckpt(_run_id)
+        if ckpt_path is None:
+            raise SystemExit(f"--checkpoint auto: 在 runs/{_run_id}/train/checkpoints/ 未找到可用 ckpt")
+        print(f'##### Auto-selected best CKPT: {ckpt_path} #####')
+    else:
+        print(f'##### Loading Trained CKPT {ckpt_path} #####')
+
     # 写运行元信息 (与 config.yaml 分离)
     run_info_path = dump_run_info(
         output_dir=output_dir,
         script=__file__,
         args=args,
         config_source=args.config,
-        checkpoint=args.checkpoint,
+        checkpoint=ckpt_path,
         extra={'task': 'inference', 'model': 'sam_road_4ch'},
     )
 
@@ -317,8 +343,7 @@ if __name__ == "__main__":
     net = SAMRoad(config)
 
     # load checkpoint
-    checkpoint = torch.load(args.checkpoint, map_location="cpu")
-    logger.info(f'##### Loading Trained CKPT: {args.checkpoint} #####')
+    checkpoint = torch.load(ckpt_path, map_location="cpu")
     net.load_state_dict(checkpoint["state_dict"], strict=True)
     net.eval()
     net.to(device)
@@ -419,7 +444,7 @@ if __name__ == "__main__":
             # convert (y_up, x) -> xy -> rc
             gt_nodes = np.stack([gt_nodes[:, 1], 400 - gt_nodes[:, 0]], axis=1)
             gt_nodes = gt_nodes[:, ::-1]
-        elif config.DATASET in ("didi_xian", "xian"):
+        elif config.DATASET == "didi_xian":
             # convert (row, col) -> rc (just swap)
             gt_nodes = gt_nodes[:, ::-1]
 
@@ -482,3 +507,6 @@ if __name__ == "__main__":
     with open(os.path.join(output_dir, 'inference_time.txt'), 'w') as f:
         f.write(time_txt)
     mark_run_finished(run_info_path)
+    if args.run_root:
+        from tools.config_utils import mark_step_done
+        mark_step_done(os.path.basename(args.run_root.rstrip('/')), 'infer')

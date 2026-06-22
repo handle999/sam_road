@@ -27,7 +27,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from datetime import datetime
 
-from tools.config_utils import load_config
+from tools.config_utils import load_config, ensure_run_dirs, mark_step_done
+from tools.registry import run_paths
 from tools.run_info import dump_run_info, mark_run_finished
 from data.dataset_completion import SatMapCompletionDataset, completion_graph_collate_fn
 from models.sam_road_completion import SAMRoadCompletion
@@ -50,6 +51,8 @@ parser.add_argument("--fast_dev_run", default=False, action='store_true')
 parser.add_argument("--dev_run", default=False, action='store_true')
 parser.add_argument("--gpus", default="0", type=str,
                     help="GPU id(s) to use, e.g. '0' or '0,1'")
+parser.add_argument("--run-root", default=None,
+    help="编排层注入: 若提供, ckpt/log 写到 {run-root}/train/ 下; 否则走默认 checkpoints/ 路径")
 
 
 class CompletionRefreshCallback(pl.Callback):
@@ -95,9 +98,23 @@ if __name__ == "__main__":
         collate_fn=completion_graph_collate_fn,
     )
 
-    # ---- Checkpoint: 按 DATASET 分目录, 避免不同数据集训练相互覆盖 ----
+    # ---- Checkpoint & 日志路径: 优先走 run-root 统一目录, 否则老路径 ----
     dataset_name = config.DATASET
-    ckpt_dir = f"checkpoints/samroad_completion_{dataset_name}/"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if args.run_root:
+        run_id = os.path.basename(args.run_root.rstrip('/'))
+        rp = run_paths(run_id)
+        ckpt_dir = rp['ckpt_dir']
+        text_log_path = rp['train_log']
+        csv_logger = CSVLogger(save_dir=rp['train_csv'], name="csv", flush_logs_every_n_steps=10)
+        log_dir = rp['train_dir']
+    else:
+        ckpt_dir = f"checkpoints/samroad_completion_{dataset_name}/"
+        log_dir = "train_logs"
+        os.makedirs(log_dir, exist_ok=True)
+        text_log_path = os.path.join(log_dir, f"samroad_completion_{dataset_name}_{timestamp}.txt")
+        csv_logger = CSVLogger(save_dir="train_logs", name="csv_completion", flush_logs_every_n_steps=10)
+
     checkpoint_callback = ModelCheckpoint(
         dirpath=ckpt_dir,
         filename="completion-{epoch:02d}-{val_loss:.4f}",
@@ -105,7 +122,7 @@ if __name__ == "__main__":
         every_n_epochs=1,
         mode="min",
         save_top_k=-1,
-        save_last=True,  # 额外保存最后一个 epoch
+        save_last=True,
     )
 
     # ---- Early Stopping: val_loss 连续 patience epoch 不降则停 ----
@@ -120,38 +137,27 @@ if __name__ == "__main__":
         ))
 
     callbacks.append(CompletionRefreshCallback())
+    callbacks.append(TextLogCallback(log_path=text_log_path))
 
-    # ---- CSVLogger (无需联网) ----
-    csv_logger = CSVLogger(save_dir="train_logs", name="csv_completion", flush_logs_every_n_steps=10)
-
-    # ---- TextLogCallback: 实时写 txt 日志 ----
-    log_dir = "train_logs"
-    os.makedirs(log_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    text_log_path = os.path.join(log_dir, f"samroad_completion_{dataset_name}_{timestamp}.txt")
-    text_log_callback = TextLogCallback(log_path=text_log_path)
-    callbacks.append(text_log_callback)
-
-    # 写运行元信息: ckpt 目录 + train_logs/ 各放一份
-    # 注意 ckpt_dir 已在上面 ModelCheckpoint 处按 dataset_name 定义, 这里复用
+    # 写运行元信息: run_root 模式写到 train_dir, 老模式仍写两份
     os.makedirs(ckpt_dir, exist_ok=True)
     run_info_path = dump_run_info(
         output_dir=ckpt_dir,
         script=__file__,
         args=args,
         config_source=args.config,
-        extra={'task': 'train', 'model': 'sam_road_completion',
-               'text_log': text_log_path},
+        extra={'task': 'train', 'model': 'sam_road_completion', 'text_log': text_log_path},
         filename=f'run_info_{timestamp}.yaml',
     )
-    dump_run_info(
-        output_dir=log_dir,
-        script=__file__,
-        args=args,
-        config_source=args.config,
-        extra={'task': 'train', 'model': 'sam_road_completion', 'ckpt_dir': ckpt_dir},
-        filename=f'run_info_{timestamp}.yaml',
-    )
+    if not args.run_root:
+        dump_run_info(
+            output_dir=log_dir,
+            script=__file__,
+            args=args,
+            config_source=args.config,
+            extra={'task': 'train', 'model': 'sam_road_completion', 'ckpt_dir': ckpt_dir},
+            filename=f'run_info_{timestamp}.yaml',
+        )
 
     trainer = pl.Trainer(
         max_epochs=config.TRAIN_EPOCHS,
@@ -169,3 +175,5 @@ if __name__ == "__main__":
 
     trainer.fit(net, train_dataloaders=train_loader, val_dataloaders=val_loader, ckpt_path=args.resume)
     mark_run_finished(run_info_path)
+    if args.run_root:
+        mark_step_done(os.path.basename(args.run_root.rstrip('/')), 'train')

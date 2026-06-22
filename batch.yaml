@@ -1,0 +1,38 @@
+# 批量实验配置 (Batch Experiment Config)
+# ==================================================
+# 用法:
+#   python run.py --batch batch.yaml            # 顺序执行全部
+#   python run.py --batch batch.yaml --parallel  # 各 run 按各自 gpus 并行
+#
+# 每个 run 必填: task, dataset; 可选: run_id, gpus, steps, config, checkpoint
+# 不指定 run_id 时自动生成 {task}_{dataset}_{timestamp}
+# 不指定 steps 时用 default_steps
+# 不指定 gpus 时默认 "0"
+
+default_steps: [train, infer, eval]
+
+runs:
+  # extraction × spacenet (GPU 0)
+  - {task: extraction, dataset: spacenet,  gpus: "0"}
+
+  # extraction × didi_xian (GPU 1)
+  - {task: extraction, dataset: didi_xian, gpus: "1"}
+
+  # completion × spacenet (GPU 0, 与 extraction spacenet 串行共用)
+  - {task: completion, dataset: spacenet,  gpus: "0"}
+
+  # completion × didi_xian (GPU 1, 与 extraction xian 串行共用)
+  - {task: completion, dataset: didi_xian, gpus: "1"}
+
+# === 进阶用法示例 (取消注释即可用) ===
+#
+# 只跑 infer+eval, 复用已有训练 (需先有对应 run_id 的 train 产物):
+# runs:
+#   - {task: completion, dataset: spacenet, run_id: completion_spacenet_20260622_2000, steps: "infer,eval", checkpoint: auto}
+#
+# 指定特定 ckpt 重跑:
+#   - {task: completion, dataset: didi_xian, run_id: completion_didi_xian_v2, steps: "infer,eval", checkpoint: runs/.../train/checkpoints/last.ckpt}
+#
+# 自定义 run_id 做消融对比:
+#   - {task: completion, dataset: spacenet, run_id: completion_spacenet_baseline,    gpus: "0"}
+#   - {task: completion, dataset: spacenet, run_id: completion_spacenet_p0fix,       gpus: "1"}

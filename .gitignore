@@ -16,6 +16,17 @@ save
 *.pth
 *.ckpt
 
+# runs/ 统一实验目录: 保留溯源 yaml/json, 忽略大产物 (ckpt 已被 *.ckpt 忽略)
+runs/*/*/csv/
+runs/*/infer/mask/
+runs/*/infer/viz/
+runs/*/infer/graph/
+runs/*/eval/apls/
+runs/*/eval/topo/
+runs/*/train/csv/
+!runs/**/*.yaml
+!runs/**/*.json
+
 # Training logs (generated at runtime)
 outputs/logs/train_*
 !outputs/logs/train_completion_spacenet_v2_20260611.txt
