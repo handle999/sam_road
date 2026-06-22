@@ -64,9 +64,9 @@ python engine/inferencer.py --config=config/toponet_vitb_256_spacenet.yaml --che
 ```
 
 ```shell
-python engine/inferencer.py --config=config/toponet_vitb_256_xian_space.yaml --checkpoint=./checkpoints/spacenet_vitb_256_e10.ckpt --output_dir=xian_sam_road_official_ep10_202512292249
+python engine/inferencer.py --config=config/toponet_vitb_256_didi_xian_spacenet.yaml --checkpoint=./checkpoints/spacenet_vitb_256_e10.ckpt --output_dir=xian_sam_road_official_ep10_202512292249
 
-python engine/inferencer.py --config=config/toponet_vitb_512_xian_cityscale.yaml --checkpoint=./checkpoints/cityscale_vitb_512_e10.ckpt --output_dir=xian_sam_road_official_cityscale_ep10_202512292303
+python engine/inferencer.py --config=config/toponet_vitb_512_didi_xian_cityscale.yaml --checkpoint=./checkpoints/cityscale_vitb_512_e10.ckpt --output_dir=xian_sam_road_official_cityscale_ep10_202512292303
 
 # spacenet
 ## official
@@ -100,7 +100,7 @@ python engine/inferencer_4ch.py --config=config/toponet_vitb_256_spacenet.yaml -
 
 # didi
 ## xian-2019-400
-python engine/inferencer_4ch.py --config=config/toponet_vitb_256_xian_cityscale.yaml --checkpoint=./checkpoints/samroad_xian_2019_400/epoch=0-step=1794.ckpt --output_dir=didi_xian_ep0
+python engine/inferencer_4ch.py --config=config/toponet_vitb_256_didi_xian_cityscale.yaml --checkpoint=./checkpoints/samroad_xian_2019_400/epoch=0-step=1794.ckpt --output_dir=didi_xian_ep0
 ```
 
 # Train
@@ -122,7 +122,7 @@ CUDA_VISIBLE_DEVICES=7 python engine/train.py --config=config/toponet_vitb_512_c
 CUDA_VISIBLE_DEVICES=6 python engine/train.py --config=config/toponet_vitb_256_spacenet.yaml 2>&1 | tee ./outputs/logs/sam_road_official_spacenet.txt
 
 # xian dataset
-CUDA_VISIBLE_DEVICES=7 python engine/train.py --config=config/toponet_vitb_256_xian_cityscale.yaml 2>&1 | tee ./outputs/logs/sam_road_xian_cityscale.txt
+CUDA_VISIBLE_DEVICES=7 python engine/train.py --config=config/toponet_vitb_256_didi_xian_cityscale.yaml 2>&1 | tee ./outputs/logs/sam_road_xian_cityscale.txt
 ```
 
 

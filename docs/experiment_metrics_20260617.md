@@ -110,12 +110,12 @@ python -m engine.inferencer_completion \
 
 # Xian 原始模型
 python -m engine.inferencer \
-  --config config/toponet_vitb_256_xian.yaml \
+  --config config/toponet_vitb_256_didi_xian.yaml \
   --checkpoint "checkpoints/samroad_didi_xian/<ckpt>"
 
 # Xian Completion (建议补跑带轨迹/已知图)
 python -m engine.inferencer_completion \
-  --config config/toponet_vitb_256_xian_completion.yaml \
+  --config config/toponet_vitb_256_didi_xian_completion.yaml \
   --checkpoint "checkpoints/samroad_completion_didi_xian/<ckpt>" \
   --input_graph_dir datasets/didi/xian/2019_400/xian_2019_400 \
   --traj_dir datasets/didi/xian/2019_400/xian_2019_400
