@@ -8,7 +8,7 @@ SAM_CKPT_PATH: 'sam_ckpts/sam_vit_b_01ec64.pth'
 PATCH_SIZE: 256
 BATCH_SIZE: 16           # 12GB 显存安全值 (原版64需要4x A100)
 DATA_WORKER_NUM: 2        # 本地多 worker 加速数据加载
-TRAIN_EPOCHS: 30
+TRAIN_EPOCHS: 10
 BASE_LR: 0.001
 FREEZE_ENCODER: False
 ENCODER_LR_FACTOR: 0.1
