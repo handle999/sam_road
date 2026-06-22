@@ -488,6 +488,11 @@ class SAMRoadCompletion(pl.LightningModule):
         self.road_pr_curve = BinaryPrecisionRecallCurve(ignore_index=-1)
         self.topo_pr_curve = BinaryPrecisionRecallCurve(ignore_index=-1)
 
+        # P2-2: 无先验退化监控指标 (val 阶段同步记录, 不干预 ckpt)
+        self.keypoint_iou_no_prior = BinaryJaccardIndex(threshold=0.5)
+        self.road_iou_no_prior = BinaryJaccardIndex(threshold=0.5)
+        self.topo_f1_no_prior = F1Score(task='binary', threshold=0.5, ignore_index=-1)
+
         # ---- Load SAM checkpoint ----
         if self.config.NO_SAM:
             return
@@ -803,6 +808,49 @@ class SAMRoadCompletion(pl.LightningModule):
         topo_gt_masked = (1 - valid_int) * -1 + valid_int * topo_gt
         self.topo_f1.update(topo_scores, topo_gt_masked.unsqueeze(-1))
 
+        # P2-2: 同步跑无先验退化模式, 记录 val_*_no_prior 监控退化程度 (不干预 ckpt).
+        # 清空全部先验 + 恢复 valid 让所有真实候选对参与, 等价纯 extraction 推理.
+        no_prior_traj = torch.zeros_like(traj_heatmap)
+        no_prior_road_feat = torch.zeros_like(road_feature_map)
+        no_prior_known_edge = None
+        # 恢复 valid: 真实候选对(src!=tgt)为 True, zero-pad 自环保持 False
+        no_prior_valid = torch.zeros_like(valid)
+        real_mask = (pairs[..., 0] != pairs[..., 1])
+        no_prior_valid = no_prior_valid | real_mask
+        no_prior_topo_gt = batch['connected'].to(torch.int32)
+
+        with torch.no_grad():
+            np_mask_logits, np_mask_scores, np_topo_logits, np_topo_scores = self(
+                rgb, no_prior_traj, no_prior_road_feat,
+                graph_points, pairs, no_prior_valid, no_prior_known_edge
+            )
+        np_mask_logits_safe = torch.nan_to_num(
+            np_mask_logits, nan=0.0, posinf=16.0, neginf=-16.0
+        ).clamp(-16, 16)
+        np_mask_loss = self.mask_criterion(np_mask_logits_safe, gt_masks)
+        np_topo_logits_safe = torch.nan_to_num(
+            np_topo_logits, nan=0.0, posinf=16.0, neginf=-16.0
+        ).clamp(-16, 16)
+        np_mask_bool = no_prior_valid.bool().unsqueeze(-1)
+        np_n_valid = np_mask_bool.sum()
+        if np_n_valid > 0:
+            np_topo_loss = self.topo_criterion(
+                np_topo_logits_safe[np_mask_bool],
+                no_prior_topo_gt.unsqueeze(-1).to(torch.float32)[np_mask_bool],
+            ).mean()
+        else:
+            np_topo_loss = torch.zeros((), device=np_topo_logits.device, dtype=np_topo_logits.dtype)
+        np_loss = np_mask_loss + np_topo_loss
+        self.log('val_loss_no_prior', np_loss, on_step=False, on_epoch=True, prog_bar=False)
+        self.log('val_mask_loss_no_prior', np_mask_loss, on_step=False, on_epoch=True, prog_bar=False)
+        self.log('val_topo_loss_no_prior', np_topo_loss, on_step=False, on_epoch=True, prog_bar=False)
+
+        self.keypoint_iou_no_prior.update(np_mask_scores[..., 0], keypoint_mask)
+        self.road_iou_no_prior.update(np_mask_scores[..., 1], road_mask)
+        np_valid_int = no_prior_valid.to(torch.int32)
+        np_topo_gt_masked = (1 - np_valid_int) * -1 + np_valid_int * no_prior_topo_gt
+        self.topo_f1_no_prior.update(np_topo_scores, np_topo_gt_masked.unsqueeze(-1))
+
     def on_validation_epoch_end(self):
         keypoint_iou = self.keypoint_iou.compute()
         road_iou = self.road_iou.compute()
@@ -813,6 +861,17 @@ class SAMRoadCompletion(pl.LightningModule):
         self.keypoint_iou.reset()
         self.road_iou.reset()
         self.topo_f1.reset()
+
+        # P2-2: 无先验退化监控 (仅记录, ckpt 仍盯 val_loss)
+        keypoint_iou_np = self.keypoint_iou_no_prior.compute()
+        road_iou_np = self.road_iou_no_prior.compute()
+        topo_f1_np = self.topo_f1_no_prior.compute()
+        self.log("keypoint_iou_no_prior", keypoint_iou_np)
+        self.log("road_iou_no_prior", road_iou_np)
+        self.log("topo_f1_no_prior", topo_f1_np)
+        self.keypoint_iou_no_prior.reset()
+        self.road_iou_no_prior.reset()
+        self.topo_f1_no_prior.reset()
 
     def test_step(self, batch, batch_idx):
         rgb = batch['rgb']

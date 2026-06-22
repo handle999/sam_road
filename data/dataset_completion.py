@@ -131,16 +131,20 @@ def map_known_edges_to_nms(known_edge_set_subdivide, nmsed_indices, patch_x0, pa
 
     这是训练时的 known_edge_index 构造核心逻辑:
     1. 从 known_edge_set_subdivide 获取已知边的 (src_sub_idx, tgt_sub_idx)
-    2. 检查 src/tgt 是否都在当前 patch 的 nmsed_indices 中
-    3. 如果是, 找到它们在 nmsed_indices 中的位置 (即 NMS 后的索引)
+    2. 优先精确匹配 (端点恰好在 nmsed_indices 中)
+    3. 精确匹配失败时, 用 KDTree 最近邻匹配 (与推理时对齐)
     4. 构造 known_edge_index [2, E]
+
+    P1-3: 增加 KDTree 最近邻回退, 消除训练(精确匹配)/推理(KDTree)gap.
+    此处 nms_keypoints 与 subdivide_points 处于同一全局坐标系
+    (sample_patch 调用本函数时尚未做 patch 偏移), 可直接 KDTree 匹配.
 
     Args:
         known_edge_set_subdivide: set of (src, tgt) 在 subdivided 图上的边
         nmsed_indices: np.array, 当前 patch NMS 后节点在 subdivided 图中的索引
-        patch_x0, patch_y0: patch 左上角坐标
-        subdivide_points: subdivided 图所有节点坐标
-        nms_keypoints: NMS 后节点的坐标 (已减去 patch_x0/y0)
+        patch_x0, patch_y0: patch 左上角坐标 (保留接口, KDTree 路径不需要)
+        subdivide_points: subdivided 图所有节点坐标 (全局)
+        nms_keypoints: NMS 后节点的坐标 (全局, 未减 patch 偏移)
         distance_threshold: 最近邻匹配阈值
 
     Returns:
@@ -149,17 +153,32 @@ def map_known_edges_to_nms(known_edge_set_subdivide, nmsed_indices, patch_x0, pa
     if len(nmsed_indices) == 0 or len(known_edge_set_subdivide) == 0:
         return torch.zeros(2, 0, dtype=torch.long)
 
-    # 建立 subdivide_idx → nms_idx 的映射
+    # 精确匹配: subdivide_idx → nms_idx
     sub_to_nms = {}
     for nms_idx, sub_idx in enumerate(nmsed_indices):
         sub_to_nms[sub_idx] = nms_idx
 
+    # KDTree 最近邻 (用于精确匹配失败的端点), 与推理时 _match_known_edges_to_graph_points 对齐
+    nms_kdtree = scipy.spatial.KDTree(nms_keypoints)
+
+    def _map_endpoint(sub_idx):
+        """精确匹配优先, 失败则 KDTree 最近邻 (阈值内才算命中)"""
+        if sub_idx in sub_to_nms:
+            return sub_to_nms[sub_idx]
+        coord = subdivide_points[sub_idx]
+        dist, idx = nms_kdtree.query(coord, k=1)
+        if dist < distance_threshold:
+            return int(idx)
+        return None
+
     edges_src = []
     edges_tgt = []
     for (s, t) in known_edge_set_subdivide:
-        if s in sub_to_nms and t in sub_to_nms:
-            edges_src.append(sub_to_nms[s])
-            edges_tgt.append(sub_to_nms[t])
+        s_mapped = _map_endpoint(s)
+        t_mapped = _map_endpoint(t)
+        if s_mapped is not None and t_mapped is not None and s_mapped != t_mapped:
+            edges_src.append(s_mapped)
+            edges_tgt.append(t_mapped)
 
     if len(edges_src) == 0:
         return torch.zeros(2, 0, dtype=torch.long)
@@ -675,6 +694,18 @@ class SatMapCompletionDataset(Dataset):
             known_edge_index = torch.zeros(2, 0, dtype=torch.long)
             traj_heatmap = np.zeros_like(traj_heatmap)
             drop_all = True
+            # P0-1 修复: 先验已清零, 必须恢复 valid 让真实候选对重新参与 loss.
+            # 否则这些步既无先验辅助、又只监督 ~50% 的候选边(已知边被 mask 掉),
+            # 严格劣于原版 SAM-Road 的纯 extraction 训练步.
+            # connected 保持原始 BFS 标签 (真实候选对的可达性, padding 自环为 False);
+            # 仅把 valid 在"真实候选对 (src!=tgt)"处恢复为 True, zero-pad 自环保持 False.
+            # 注: 此处 pairs/valid 为 list-of-tuple 结构 (zip(*topo_samples) 产物, 非 tensor),
+            #     逐样本按真实候选对 (src!=tgt) 恢复 valid.
+            valid = tuple(
+                tuple((p[0] != p[1]) for p in sample_pairs)
+                for sample_pairs in pairs
+            )
+            # connected 已含真实候选对的 BFS 标签 + padding 自环的 False, 无需改动
 
         # ---- traj 热力图增强 (路径A捷径缓解) ----
         if self.is_train and not drop_all and self.has_traj[img_idx]:

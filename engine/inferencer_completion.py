@@ -202,7 +202,19 @@ def infer_one_img(net, img, config, known_graph_adj=None, traj_heatmap_full=None
     graph_points = graph_extraction.extract_graph_points(
         fused_keypoint_mask, fused_road_mask, config
     )
-    print(f'Extracted {graph_points.shape[0]} graph points')
+    print(f'Extracted {graph_points.shape[0]} graph points from mask')
+
+    # P2-1: 注入已知路网节点作为补全锚点.
+    # 视觉失效时 mask 提取不全, 注入已知节点既防止整图丢失(任务一致性),
+    # 又给 TopoNet 提供"已知↔视觉"连边的锚点.
+    if known_graph_adj is not None:
+        graph_points, injected = _inject_known_nodes(
+            graph_points, known_graph_adj, config.ROAD_NMS_RADIUS
+        )
+        if injected > 0:
+            print(f'Injected {injected} known-road-network nodes as anchors')
+
+    # 注入后若仍无节点(已知图为空且 mask 空), 才真正返回空
     if graph_points.shape[0] == 0:
         return graph_points, np.zeros((0, 2), dtype=np.int32), fused_keypoint_mask, fused_road_mask
 
@@ -476,6 +488,57 @@ def _get_known_edges_in_graph_points(known_graph_adj, graph_points, neighbor_rad
     if known_edge_index.shape[1] == 0:
         return np.zeros((0, 2), dtype=np.int32)
     return known_edge_index.numpy().T  # [E, 2]
+
+
+def _inject_known_nodes(graph_points, known_graph_adj, nms_radius):
+    """
+    P2-1: 将已知路网节点注入 graph_points, 补全任务一致性保障.
+
+    视觉失效(遮挡/纯黑)时, mask 可能提不出已知路段的节点, 导致:
+      1. known_graph 的边在后处理虽被硬覆盖保留, 但若 graph_points 全空会触发
+         infer_one_img 提前 return → 整张已知图丢失 (任务不一致).
+      2. TopoNet 缺少已知节点锚点, 无法预测"已知节点↔视觉节点"的补全连边.
+
+    本函数把未与现有 graph_points 重合(距离 > nms_radius)的已知节点追加进去,
+    作为 TopoNet 向外辐射连边的锚点. 已重合的不再追加(避免重复节点).
+
+    Args:
+        graph_points: [N, 2] mask 提取的全局节点坐标 (xy), 可能为空
+        known_graph_adj: dict, 已知路网邻接表 (key/val 均为 (x, y) 坐标)
+        nms_radius: 去重阈值, 距离 <= 此值视为已存在
+
+    Returns:
+        graph_points: [N', 2] 注入后的节点坐标 (xy)
+        injected_count: int, 实际注入的节点数
+    """
+    if known_graph_adj is None or len(known_graph_adj) == 0:
+        return graph_points, 0
+
+    # 收集已知路网所有节点坐标
+    known_nodes = set()
+    for node, neighbors in known_graph_adj.items():
+        known_nodes.add(node)
+        for neighbor in neighbors:
+            known_nodes.add(neighbor)
+    if len(known_nodes) == 0:
+        return graph_points, 0
+
+    known_coords = np.array(list(known_nodes), dtype=np.float32)  # [N_known, 2] xy
+
+    if len(graph_points) == 0:
+        # mask 完全提不出节点 → 全部注入 (避免整图丢失)
+        inject_coords = known_coords
+    else:
+        # 距离现有 graph_points > nms_radius 的已知节点才注入 (去重)
+        existing_kdtree = scipy.spatial.KDTree(graph_points)
+        dists, _ = existing_kdtree.query(known_coords, k=1)
+        inject_mask = dists > nms_radius
+        inject_coords = known_coords[inject_mask]
+
+    if len(inject_coords) > 0:
+        graph_points = np.concatenate([graph_points, inject_coords], axis=0)
+
+    return graph_points, len(inject_coords)
 
 
 if __name__ == "__main__":
