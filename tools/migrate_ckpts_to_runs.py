@@ -21,11 +21,15 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from tools.registry import run_paths
-from tools.config_utils import save_config_snapshot, write_profile
+from tools.config_utils import save_config_snapshot, write_profile, select_best_ckpt
 from tools.run_info import _try_get_git
 
 # 旧目录 → (task, dataset) 映射 (从 run_info 的 script + config_source 反推)
-# 目录名规律: samroad_{dataset} = extraction, samroad_completion_{dataset} = completion
+# 目录名规律:
+#   samroad_{dataset}                  = extraction
+#   samroad_completion_{dataset}       = completion
+#   samroad_4ch_{dataset}              = 4ch
+#   samroad_4c_update_{dataset}        = 4ch (历史 update 命名)
 # 特例: samroad_completion (无 dataset 后缀) 实际是 spacenet
 def parse_old_dir(dirname):
     """从旧 checkpoint 目录名反推 (task, dataset)."""
@@ -35,8 +39,16 @@ def parse_old_dir(dirname):
     if dirname.startswith('samroad_completion_'):
         ds = dirname[len('samroad_completion_'):]
         return 'completion', ds
+    # 注意: 必须在通用 samroad_ 分支之前处理 4ch/4c 历史目录,
+    # 否则 samroad_4c_update_spacenet 会被误判为 extraction × 4c_update_spacenet.
     if dirname.startswith('samroad_4ch_'):
         ds = dirname[len('samroad_4ch_'):]
+        return '4ch', ds
+    if dirname.startswith('samroad_4c_update_'):
+        ds = dirname[len('samroad_4c_update_'):]
+        return '4ch', ds
+    if dirname.startswith('samroad_4c_'):
+        ds = dirname[len('samroad_4c_'):]
         return '4ch', ds
     if dirname.startswith('samroad_'):
         ds = dirname[len('samroad_'):]
@@ -128,6 +140,11 @@ def migrate(dry_run=True):
         # 标记 train 已完成
         from tools.config_utils import mark_step_done
         mark_step_done(run_id, 'train')
+        best = select_best_ckpt(run_id)
+        if best:
+            print(f'  best_ckpt.txt 写入: {best}')
+        else:
+            print('  ⚠️ 未能选择 best ckpt (train/checkpoints/ 下没有 .ckpt?)')
         print(f'  profile.yaml 写入, train 标记完成')
 
         migrated.append((dirname, run_id, ckpts))

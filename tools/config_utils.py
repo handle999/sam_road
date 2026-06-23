@@ -118,6 +118,17 @@ def select_best_ckpt(run_id):
                 best_loss = loss
                 best_ckpt = os.path.join(ckpt_dir, fname)
 
+    # 老权重文件名可能没有 val_loss (如 epoch=9-step=13230.ckpt)。
+    # 这种情况下退到 last.ckpt；若也没有 last, 选 mtime 最新的 ckpt。
+    if best_ckpt is None:
+        last_ckpt = os.path.join(ckpt_dir, 'last.ckpt')
+        if os.path.exists(last_ckpt):
+            best_ckpt = last_ckpt
+        else:
+            ckpts = [os.path.join(ckpt_dir, f) for f in os.listdir(ckpt_dir) if f.endswith('.ckpt')]
+            if ckpts:
+                best_ckpt = max(ckpts, key=os.path.getmtime)
+
     if best_ckpt is not None:
         with open(paths['best_ckpt'], 'w') as f:
             f.write(best_ckpt + '\n')
