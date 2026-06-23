@@ -358,7 +358,7 @@ python engine/train_completion.py --config=config/toponet_vitb_256_spacenet_comp
 >     --run-id completion_spacenet_20260616_202527 --steps infer,eval --resume-run
 > ```
 
-三个 inferencer 都支持 `--run-root`（走 `runs/{id}/infer/`）和 `--checkpoint auto`（自动选 best）。不给 `--run-root` 时走老路径 `./save/<前缀>_<timestamp>/`，目录结构一致：
+三个 inferencer 都支持 `--run-root`（走 `runs/{id}/infer/`）和 `--checkpoint auto`（自动选 best）。`run.py --checkpoint` 还支持 `last`、`epoch:N` / `epN` / 纯数字 `N`（按 Lightning 0-based epoch 编号找 ckpt；例如 `9` = `epoch=09` = 第 10 个 epoch 结束），以及完整路径。不给 `--run-root` 时走老路径 `./save/<前缀>_<timestamp>/`，目录结构一致：
 
 ```
 save/<前缀>_<timestamp>/

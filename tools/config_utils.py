@@ -144,3 +144,77 @@ def get_best_ckpt(run_id):
             if p and os.path.exists(p):
                 return p
     return select_best_ckpt(run_id)
+
+
+def get_ckpt_by_epoch(run_id, epoch):
+    """按 Lightning 的 0-based epoch 编号选择 ckpt.
+
+    Args:
+        run_id: runs/{run_id}
+        epoch: int, 文件名里的 epoch 编号. 例如 epoch=09 表示第 10 个 epoch 后的 ckpt.
+
+    Returns:
+        匹配到的 ckpt 路径; 未找到返回 None.
+
+    支持的文件名示例:
+        completion-epoch=09-val_loss=0.1288.ckpt
+        epoch-epoch=09-val_loss=0.1244.ckpt
+        epoch=9-step=13230.ckpt
+    """
+    paths = run_paths(run_id)
+    ckpt_dir = paths['ckpt_dir']
+    if not os.path.isdir(ckpt_dir):
+        return None
+
+    import re
+    try:
+        epoch = int(epoch)
+    except (TypeError, ValueError):
+        return None
+
+    # 抓文件名中最后一个 epoch= / epoch- 编号; 兼容 epoch-epoch=09 这种 PL 模板
+    epoch_pat = re.compile(r'epoch[=-](\d+)')
+    loss_pat = re.compile(r'val_loss=([0-9.]+)\.ckpt$')
+    matches = []
+    for fname in os.listdir(ckpt_dir):
+        if not fname.endswith('.ckpt'):
+            continue
+        nums = epoch_pat.findall(fname)
+        if not nums:
+            continue
+        if int(nums[-1]) != epoch:
+            continue
+        path = os.path.join(ckpt_dir, fname)
+        m = loss_pat.search(fname)
+        loss = float(m.group(1)) if m else float('inf')
+        matches.append((loss, os.path.getmtime(path), path))
+
+    if not matches:
+        return None
+    # 同一 epoch 理论只有一份; 若有多份, 优先 val_loss 小, 再 mtime 新
+    matches.sort(key=lambda x: (x[0], -x[1]))
+    return matches[0][2]
+
+
+def resolve_checkpoint_arg(run_id, checkpoint_arg):
+    """解析 run.py --checkpoint 参数.
+
+    支持:
+      - auto: best_ckpt.txt / select_best_ckpt
+      - last: train/checkpoints/last.ckpt
+      - epoch:N / epN / N: 按 Lightning 0-based epoch 编号查找 ckpt
+      - 其它: 原样视为路径
+    """
+    if checkpoint_arg == 'auto':
+        return get_best_ckpt(run_id)
+
+    paths = run_paths(run_id)
+    if checkpoint_arg == 'last':
+        return os.path.join(paths['ckpt_dir'], 'last.ckpt')
+
+    import re
+    m = re.fullmatch(r'(?:epoch:|ep)?(\d+)', str(checkpoint_arg))
+    if m:
+        return get_ckpt_by_epoch(run_id, int(m.group(1)))
+
+    return checkpoint_arg

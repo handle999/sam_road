@@ -36,8 +36,8 @@ if PROJECT_ROOT not in sys.path:
 from tools.registry import TASKS, DATASETS, get_task, get_dataset, default_config_for, run_paths
 from tools.config_utils import (
     ensure_run_dirs, write_profile, read_profile,
-    mark_step_done, is_step_done, select_best_ckpt, get_best_ckpt,
-    save_config_snapshot,
+    mark_step_done, is_step_done, select_best_ckpt,
+    resolve_checkpoint_arg, save_config_snapshot,
 )
 from tools.run_info import _try_get_git
 
@@ -68,7 +68,7 @@ def build_parser():
     # 覆写 (命令行 > profile > config 默认)
     p.add_argument('--config', default=None, help='覆写 task 的默认 config 路径')
     p.add_argument('--checkpoint', default='auto',
-                   help='infer 用哪个 ckpt: auto=自动选best / 路径 / last')
+                   help='infer 用哪个 ckpt: auto=自动选best / last / epoch:N 或 epN 或 N (Lightning 0-based epoch编号) / 路径')
     p.add_argument('--precision', default=None, help='16 或 32 (覆写)')
     p.add_argument('--epochs', type=int, default=None, help='覆写 config.TRAIN_EPOCHS')
     p.add_argument('--patience', type=int, default=None, help='early stopping patience')
@@ -276,21 +276,20 @@ def execute_run(args, task, dataset, run_id):
 
         elif step == 'infer':
             # 确定 ckpt 路径
-            ckpt_path = args.checkpoint
-            if ckpt_path == 'auto':
-                if args.dry_run:
-                    # dry-run 时 train 未真跑, 用占位符展示命令
-                    ckpt_path = f'{rp["ckpt_dir"]}/<auto-best>.ckpt'
-                else:
-                    best = get_best_ckpt(run_id)
-                    if best is None:
-                        print(f'✗ infer: auto 选不到 ckpt, 先跑 train 或用 --checkpoint 指定路径')
-                        return False
-                    ckpt_path = best
-            elif ckpt_path == 'last':
-                ckpt_path = os.path.join(rp['ckpt_dir'], 'last.ckpt')
-                if not args.dry_run and not os.path.exists(ckpt_path):
-                    print(f'✗ infer: last.ckpt 不存在: {ckpt_path}')
+            if args.dry_run and args.checkpoint == 'auto':
+                # dry-run 时 train 未真跑, 用占位符展示命令
+                ckpt_path = f'{rp["ckpt_dir"]}/<auto-best>.ckpt'
+            else:
+                ckpt_path = resolve_checkpoint_arg(run_id, args.checkpoint)
+                if ckpt_path is None:
+                    print(f'✗ infer: 无法解析 checkpoint={args.checkpoint!r}; '
+                          f'可用 auto / last / epoch:N / epN / 数字 / 路径')
+                    return False
+                if not args.dry_run and args.checkpoint != 'auto' and not os.path.exists(ckpt_path):
+                    print(f'✗ infer: checkpoint 不存在: {ckpt_path}')
+                    return False
+                if not args.dry_run and args.checkpoint == 'auto' and not os.path.exists(ckpt_path):
+                    print(f'✗ infer: auto 选到的 ckpt 不存在: {ckpt_path}')
                     return False
             cmd = build_infer_cmd(args, task, dataset, run_id, config_path, ckpt_path)
             if not run_step('infer', cmd, env, args.dry_run):
