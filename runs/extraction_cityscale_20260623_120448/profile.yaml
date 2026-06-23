@@ -1,0 +1,26 @@
+run_id: extraction_cityscale_20260623_120448
+task: extraction
+dataset: cityscale
+created_at: '20260623_120448'
+migrated_from: checkpoints/samroad_cityscale
+config_source: null
+config_snapshot: null
+steps_requested:
+- train
+- infer
+- eval
+paths:
+  run_root: runs/extraction_cityscale_20260623_120448
+  train_dir: runs/extraction_cityscale_20260623_120448/train
+  ckpt_dir: runs/extraction_cityscale_20260623_120448/train/checkpoints
+  infer_dir: runs/extraction_cityscale_20260623_120448/infer
+  eval_dir: runs/extraction_cityscale_20260623_120448/eval
+  profile: runs/extraction_cityscale_20260623_120448/profile.yaml
+  best_ckpt: runs/extraction_cityscale_20260623_120448/best_ckpt.txt
+git:
+  commit: 85871c2
+  branch: main
+  dirty: true
+step_status:
+  train: done (migrated)
+note: 由 migrate_ckpts_to_runs.py 从旧 checkpoints/ 迁移而来

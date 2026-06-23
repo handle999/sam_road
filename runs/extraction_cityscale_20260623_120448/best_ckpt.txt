@@ -1,0 +1,1 @@
+runs/extraction_cityscale_20260623_120448/train/checkpoints/epoch=9-step=25000.ckpt

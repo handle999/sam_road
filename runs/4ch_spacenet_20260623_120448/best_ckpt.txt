@@ -1,0 +1,1 @@
+runs/4ch_spacenet_20260623_120448/train/checkpoints/epoch=9-step=13230.ckpt

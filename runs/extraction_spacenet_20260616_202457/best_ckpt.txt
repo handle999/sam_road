@@ -1,1 +1,1 @@
-runs/extraction_spacenet_20260616_202457/train/checkpoints/epoch-epoch=09-val_loss=0.1244.ckpt
+runs/extraction_spacenet_20260616_202457/train/checkpoints/epoch-epoch=02-val_loss=0.1109.ckpt

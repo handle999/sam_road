@@ -1,1 +1,1 @@
-runs/completion_spacenet_20260616_202527/train/checkpoints/completion-epoch=09-val_loss=0.1288.ckpt
+runs/completion_spacenet_20260616_202527/train/checkpoints/completion-epoch=01-val_loss=0.1179.ckpt
