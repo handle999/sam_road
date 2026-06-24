@@ -8,7 +8,7 @@ apls_interval: 10
 topo_radius: 0.0015
 
 # Test split - read from JSON file
-test_split_file: "datasets/didi/xian/2019_400/data_split.json"
+test_split_file: "datasets/didi/xian/data_split.json"
 
 # Path patterns (relative to project root)
 gt_pattern: "datasets/didi/xian/2019_400/region_{}_graph_gt.pickle"

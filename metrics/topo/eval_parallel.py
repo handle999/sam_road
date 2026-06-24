@@ -152,7 +152,7 @@ if __name__ == '__main__':
         with open('../datasets/spacenet/data_split.json', 'r') as jf:
             tile_list = json.load(jf)['test']
     elif args.dataset == 'didi_xian':
-        with open('../datasets/didi/xian/2019_400/data_split.json', 'r') as jf:
+        with open('../datasets/didi/xian/data_split.json', 'r') as jf:
             tile_list = json.load(jf)['test']
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")

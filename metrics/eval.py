@@ -18,8 +18,13 @@ import platform
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Add this script's directory to path so we can import apls/topo modules
+# Add this script's directory to path so we can import apls/topo modules.
+# eval.py 内部大量历史路径按 cwd=metrics/ 书写 (../datasets, ../save, ../runs)。
+# run.py 从项目根调用 `python metrics/eval.py`, 手动评估则通常 `cd metrics` 后调用。
+# 为保证两种入口语义一致, 这里强制切到 metrics/ 目录。
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+os.chdir(SCRIPT_DIR)
 
 
 def canonical_dataset(dataset):
@@ -50,7 +55,7 @@ def get_test_indices(dataset):
         with open('../datasets/spacenet/data_split.json', 'r') as f:
             return json.load(f).get('test', [])
     elif dataset == 'didi_xian':
-        with open('../datasets/didi/xian/2019_400/data_split.json', 'r') as f:
+        with open('../datasets/didi/xian/data_split.json', 'r') as f:
             return json.load(f).get('test', [])
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
