@@ -73,6 +73,47 @@ def get_patch_info_one_img(image_index, image_size, sample_margin, patch_size, p
     return patch_info
 
 
+def transform_known_graph_coords(known_graph_adj, dataset):
+    """
+    把 known_graph_adj 的节点坐标从 pickle 原始格式统一转成 (x, y) 图像坐标空间.
+
+    各数据集 pickle 坐标系 (与 dataset_completion.py 的 coord_transform 对齐):
+      - didi_xian / cityscale: pickle 是 (row, col), 转 (x, y) = (col, row)
+      - spacenet: pickle 是 (raw_y, raw_x), 原点左下, 转 (x, y) = (raw_x, 400 - raw_y)
+
+    修复坐标系 Bug 1/2 的统一入口:
+      - 训练侧: get_known_adj_for_render 调用 → render_graph_feature_map 拿到 (x,y) (修 Bug 2)
+      - 推理侧: load_known_graph 调用 → render/匹配/注入 都拿到 (x,y) (修 Bug 1+2 推理部分)
+
+    转完后所有下游 (render_graph_feature_map, _match_known_edges_to_graph_points,
+    _inject_known_nodes) 拿到的都是 (x, y), 与 graph_points / image_embeddings 对齐.
+
+    Args:
+        known_graph_adj: dict, 原始 pickle 邻接表 {(row,col): [(row,col), ...]}
+        dataset: config.DATASET 取值 ('spacenet' / 'didi_xian' / 'didi' / 'cityscale')
+
+    Returns:
+        新邻接表 dict, key/val 均为 (x, y) 坐标 (float)
+    """
+    if known_graph_adj is None or len(known_graph_adj) == 0:
+        return known_graph_adj
+
+    # 按数据集选择坐标变换: (row, col) → (x, y)
+    if dataset in ('spacenet',):
+        # spacenet: (raw_y, raw_x) → (x, y) = (raw_x, 400 - raw_y)
+        # IMAGE_SIZE 固定 400, 与 dataset.py spacenet 分支一致
+        transform_node = lambda node: (node[1], 400.0 - node[0])
+    else:
+        # didi_xian / cityscale / didi: (row, col) → (x, y) = (col, row)
+        transform_node = lambda node: (node[1], node[0])
+
+    new_adj = {}
+    for node, neighbors in known_graph_adj.items():
+        new_node = transform_node(node)
+        new_adj[new_node] = [transform_node(n) for n in neighbors]
+    return new_adj
+
+
 def render_graph_feature_map(known_graph_adj, patch_x0, patch_y0, patch_size):
     """
     从已知路网的邻接表渲染2通道几何特征图 (v2精简版)
@@ -299,18 +340,19 @@ class CompletionGraphLabelGenerator:
         从已知边集合构造邻接表 (用于渲染 road_feature_map)
 
         Returns:
-            known_adj: dict, {(x,y): [(x1,y1), ...]}
+            known_adj: dict, {(x,y): [(x1,y1), ...]}  ← 已转成 (x,y) 图像坐标空间
         """
         full_adj = self.full_graph_adj_original
-        known_adj = {}
+        known_adj_rc = {}
         for node, neighbors in full_adj.items():
             for neighbor in neighbors:
                 edge = (min(node, neighbor), max(node, neighbor))
                 if edge in self.known_edges_original:
-                    if node not in known_adj:
-                        known_adj[node] = []
-                    known_adj[node].append(neighbor)
-        return known_adj
+                    if node not in known_adj_rc:
+                        known_adj_rc[node] = []
+                    known_adj_rc[node].append(neighbor)
+        # Bug 2 修复: 把 pickle (row,col) 统一转成 (x,y), 与 image_embeddings 对齐
+        return transform_known_graph_coords(known_adj_rc, self.config.DATASET)
 
     def sample_patch(self, patch, rot_index=0):
         """

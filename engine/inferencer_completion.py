@@ -33,7 +33,7 @@ from tools.config_utils import load_config, create_output_dir_and_save_config
 from tools.run_info import dump_run_info, mark_run_finished
 from data.dataset import cityscale_data_partition, read_rgb_img, get_patch_info_one_img
 from data.dataset import spacenet_data_partition
-from data.dataset_completion import didi_data_partition, render_graph_feature_map
+from data.dataset_completion import didi_data_partition, render_graph_feature_map, transform_known_graph_coords
 from models.sam_road_completion import SAMRoadCompletion
 from postprocess import graph_extraction
 from postprocess import graph_utils
@@ -82,6 +82,9 @@ def load_known_graph(img_id, config):
     默认读预生成的 partial rn (_partial.p, keep_ratio=0.5 固定 seed=42, 由
     data/generate_partial_prior.py 生成), 与训练时"部分子图"策略对齐.
     想喂完整图做上界测试, 用 --input_graph 显式指定完整 .p 路径.
+
+    Bug 1/2 修复: 返回前把 pickle (row,col) 坐标统一转成 (x,y) 图像坐标空间,
+    此后 render/匹配/注入 拿到的都是 (x,y), 与 graph_points / image_embeddings 对齐.
     """
     if args.input_graph:
         graph_path = args.input_graph
@@ -95,7 +98,9 @@ def load_known_graph(img_id, config):
 
     if os.path.exists(graph_path):
         with open(graph_path, 'rb') as f:
-            return pickle.load(f)
+            known_adj = pickle.load(f)
+        # 坐标系统一转 (x,y), 修复 Bug 1 (匹配) + Bug 2 (render) 推理部分
+        return transform_known_graph_coords(known_adj, config.DATASET)
     else:
         print(f"Warning: known graph (partial rn) not found at {graph_path}")
         print(f"         生成: python data/generate_partial_prior.py --dataset <didi|spacenet> "

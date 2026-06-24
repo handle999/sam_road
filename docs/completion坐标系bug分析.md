@@ -176,6 +176,63 @@ completion 比 extraction 差,是**两个坐标系 bug 叠加**:
 
 ---
 
+## 八、修复实施(2026-06-25,已落地)
+
+### 8.1 修法:入口统一转
+
+新增共享函数 `transform_known_graph_coords(known_graph_adj, dataset)`(在 `data/dataset_completion.py`),按数据集把 pickle `(row,col)` 转 `(x,y)`:
+- didi_xian/cityscale:`(r,c)→(c,r)`
+- spacenet:`(r,c)→(c, 400-r)`
+
+在**两个入口**调用,下游所有消费点不动:
+
+| 入口 | 文件 | 修复的 Bug |
+|------|------|-----------|
+| `get_known_adj_for_render()` | `data/dataset_completion.py` | Bug 2(训练侧 render) |
+| `load_known_graph()` | `engine/inferencer_completion.py` | Bug 1(推理匹配)+ Bug 2(推理 render) |
+
+转完后 `render_graph_feature_map`、`_match_known_edges_to_graph_points`、`_inject_known_nodes` 拿到的都是 `(x,y)`,与 graph_points / image_embeddings 对齐。这些函数内部不用改(它们的 docstring 本就期待 `(x,y)`,是调用方之前传错了)。
+
+### 8.2 验证结果(真实数据)
+
+**Bug 1(边端点正确率)**:
+
+| 数据集 | 修复前 | 修复后 |
+|------|:---:|:---:|
+| didi_xian (72 边) | 0% | **100%** |
+| spacenet (48 边) | 0% | **100%** |
+
+**Bug 2(render IoU)**:
+
+| 数据集 | 修复前 | 修复后 |
+|------|:---:|:---:|
+| didi_xian | 0.040 | **0.593** |
+| spacenet | 0.019 | **0.609** |
+
+(修复后 IoU 非 1.0 是因为 partial prior 稀疏路网画粗线的 thickness 差异,坐标已对齐)
+
+### 8.3 ⚠️ 关键影响:现有 ckpt 的复用问题
+
+Bug 2 修了训练侧 `get_known_adj_for_render`(现在返回 `(x,y)`),**改变了训练输入分布**。这意味着:
+
+- **现有 completion ckpt**(在 render 转置错位下训练)与新代码(render 对齐)**train/infer 不一致**。用旧 ckpt + 新代码跑 infer,road_feature_map 从"转置"变成"对齐",模型没见过这种输入,效果可能变差。
+- **Bug 1 是纯推理修复**,不改训练,但因为它和 Bug 2 同在 `load_known_graph` 一起修了,无法单独验证 Bug 1 对旧 ckpt 的效果。
+
+**因此 completion 必须重训**才能享受两个 bug 修复的完整收益。重训后:
+- 训练时 road_feature_map 对齐 → FeatureFusion 真正用上几何先验
+- 推理时 known edges 连对 → 不再注入错误边
+
+**重训后预期**:completion 应该回到 ≥ extraction 水平,甚至超过(先验真正发挥作用)。
+
+### 8.4 执行建议
+
+1. **completion 重训**:`run.py --task completion --dataset spacenet --gpus 0` + `--dataset didi_xian`,然后 infer+eval
+2. extraction 不受影响,现有 ckpt 可继续用
+3. 重训后对比 completion vs extraction,验证 completion 回升
+
+
+---
+
 ## 四、下一步行动建议
 
 1. **先修推理侧匹配坐标系**(3.2),这是确证的 bug,修了直接重跑 infer+eval 看指标回升
