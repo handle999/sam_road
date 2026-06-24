@@ -132,14 +132,20 @@ def main():
                         help="Ratio of edges to keep (0.0 to 1.0). Default is 0.5 (50%).")
     parser.add_argument("--thickness", type=int, default=3,
                         help="Line thickness for rendered PNG. Default is 3.")
-    
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for reproducible sampling (infer 需固定). Default 42.")
+
     args = parser.parse_args()
+
+    # 固定随机种子, 保证 infer 用的 partial rn 可复现 (训练侧不用此脚本, 仍每 epoch 随机)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
 
     # 创建输出目录
     os.makedirs(args.output_dir, exist_ok=True)
 
     sampler = PartialGraphSampler(
-        dataset_type=args.dataset, 
+        dataset_type=args.dataset,
         keep_ratio=args.keep_ratio,
         line_thickness=args.thickness
     )
@@ -149,11 +155,30 @@ def main():
     search_pattern2 = os.path.join(args.input_dir, "*.pickle")
     file_list = glob.glob(search_pattern1) + glob.glob(search_pattern2)
 
+    # 只采样训练/推理实际用的 GT 图, 排除其他 (评测 GT / dense 变体 / active 图 / 已生成的 partial):
+    #   didi:      region_{c}_refine_gt_graph.p   (排除 graph_gt.pickle 评测GT, active_graph.pickle)
+    #   spacenet:  {id}__gt_graph.p               (排除 _dense*, _dense_spacenet 等变体)
+    #   cityscale: region_{c}_refine_gt_graph.p
+    # 已有 _partial 后缀的也排除, 防止重复运行时把 partial 当输入再采样.
+    def is_target_input(fname):
+        if '_partial' in fname:
+            return False
+        if args.dataset == 'didi':
+            return fname.endswith('refine_gt_graph.p')
+        elif args.dataset == 'cityscale':
+            return fname.endswith('refine_gt_graph.p')
+        elif args.dataset == 'spacenet':
+            # __gt_graph.p 但排除 __gt_graph_dense*.p
+            return fname.endswith('__gt_graph.p')
+        return False
+
+    file_list = [f for f in file_list if is_target_input(os.path.basename(f))]
+
     if len(file_list) == 0:
         print(f"No pickle files found in {args.input_dir}")
         return
 
-    print(f"Found {len(file_list)} files. Starting sampling (Keep Ratio: {args.keep_ratio})...")
+    print(f"Found {len(file_list)} files. Starting sampling (Keep Ratio: {args.keep_ratio}, seed: {args.seed})...")
 
     for file_path in tqdm(file_list):
         base_name = os.path.basename(file_path)

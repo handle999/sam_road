@@ -12,7 +12,7 @@ v2 变更:
 输入:
   - 遥感影像
   - 已知路网 (pickle 格式邻接表)
-  - 可选: 轨迹热力图 (Xian active.png)
+  - 可选: 轨迹热力图 (Xian traj.png, 真实GPS轨迹)
 输出:
   - 补全后的完整路网
 """
@@ -58,7 +58,7 @@ parser.add_argument("--input_graph", default=None,
 parser.add_argument("--input_graph_dir", default=None,
                     help="directory of known graph pickle files, one per region")
 parser.add_argument("--traj_dir", default=None,
-                    help="directory of trajectory heatmap images (active.png), for Xian dataset")
+                    help="directory of trajectory heatmap images (region_{id}_traj.png, 真实GPS轨迹), for Xian dataset")
 parser.add_argument("--device", default="cuda", help="device to use")
 args = parser.parse_args()
 
@@ -77,14 +77,19 @@ def get_batch_img_patches(img, batch_patch_info):
 
 
 def load_known_graph(img_id, config):
-    """加载已知路网"""
+    """加载已知路网 (partial rn).
+
+    默认读预生成的 partial rn (_partial.p, keep_ratio=0.5 固定 seed=42, 由
+    data/generate_partial_prior.py 生成), 与训练时"部分子图"策略对齐.
+    想喂完整图做上界测试, 用 --input_graph 显式指定完整 .p 路径.
+    """
     if args.input_graph:
         graph_path = args.input_graph
     elif args.input_graph_dir:
         if config.DATASET == 'spacenet':
-            graph_path = os.path.join(args.input_graph_dir, f'{img_id}__gt_graph.p')
+            graph_path = os.path.join(args.input_graph_dir, f'{img_id}__gt_graph_partial.p')
         else:
-            graph_path = os.path.join(args.input_graph_dir, f'region_{img_id}_refine_gt_graph.p')
+            graph_path = os.path.join(args.input_graph_dir, f'region_{img_id}_refine_gt_graph_partial.p')
     else:
         return None
 
@@ -92,7 +97,9 @@ def load_known_graph(img_id, config):
         with open(graph_path, 'rb') as f:
             return pickle.load(f)
     else:
-        print(f"Warning: known graph not found at {graph_path}")
+        print(f"Warning: known graph (partial rn) not found at {graph_path}")
+        print(f"         生成: python data/generate_partial_prior.py --dataset <didi|spacenet> "
+              f"--input_dir <dir> --output_dir <dir> --keep_ratio 0.5 --seed 42")
         return None
 
 
@@ -102,7 +109,7 @@ def load_traj_heatmap(img_id, config):
         return None
 
     if config.DATASET == 'didi' or config.DATASET == 'didi_xian':
-        traj_path = os.path.join(args.traj_dir, f'region_{img_id}_active.png')
+        traj_path = os.path.join(args.traj_dir, f'region_{img_id}_traj.png')
     else:
         return None
 

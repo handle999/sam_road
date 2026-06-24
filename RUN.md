@@ -129,12 +129,31 @@ CUDA_VISIBLE_DEVICES=7 python engine/train.py --config=config/toponet_vitb_256_d
 # sample pickle
 
 ```shell
-python data/generate_partial_prior.py --dataset spacenet --input_dir ./datasets/spacenet/RGB_1.0_meter --output_dir ./datasets/spacenet/sample_0.5 --keep_ratio 0.5 --thickness 3
+python data/generate_partial_prior.py --dataset spacenet --input_dir ./datasets/spacenet/RGB_1.0_meter --output_dir ./datasets/spacenet/sample_0.5 --keep_ratio 0.5 --thickness 3 --seed 42
 
-python data/generate_partial_prior.py --dataset spacenet --input_dir ./datasets/spacenet/RGB_1.0_meter --output_dir ./datasets/spacenet/sample_0.25 --keep_ratio 0.25 --thickness 3
+python data/generate_partial_prior.py --dataset spacenet --input_dir ./datasets/spacenet/RGB_1.0_meter --output_dir ./datasets/spacenet/sample_0.25 --keep_ratio 0.25 --thickness 3 --seed 42
 
-python data/generate_partial_prior.py --dataset spacenet --input_dir ./datasets/spacenet/RGB_1.0_meter --output_dir ./datasets/spacenet/sample_0.75 --keep_ratio 0.75 --thickness 3
+python data/generate_partial_prior.py --dataset spacenet --input_dir ./datasets/spacenet/RGB_1.0_meter --output_dir ./datasets/spacenet/sample_0.75 --keep_ratio 0.75 --thickness 3 --seed 42
 ```
+
+# completion partial rn (infer 用, 与训练策略对齐)
+
+completion 模型推理默认读 partial rn (`_partial.p`, keep_ratio=0.5 固定 seed=42), 需先生成:
+```shell
+# xian (didi) — 从 refine_gt_graph.p 采样, 输出 _partial.p + .png 到原目录
+python data/generate_partial_prior.py --dataset didi \
+    --input_dir ./datasets/didi/xian/2019_400 --output_dir ./datasets/didi/xian/2019_400 \
+    --keep_ratio 0.5 --seed 42
+
+# spacenet — 从 __gt_graph.p 采样
+python data/generate_partial_prior.py --dataset spacenet \
+    --input_dir ./datasets/spacenet/RGB_1.0_meter --output_dir ./datasets/spacenet/RGB_1.0_meter \
+    --keep_ratio 0.5 --seed 42
+```
+> `--seed 42` 保证 infer 复现; 训练侧仍每 epoch 随机 keep_ratio∈[0.2,0.8] (多样性), 策略一致。
+> completion 推理: `--input_graph_dir <dir>` 默认读 `region_{id}_refine_gt_graph_partial.p` (didi) /
+> `{id}__gt_graph_partial.p` (spacenet)。想喂完整图做上界测试用 `--input_graph <完整.p>` 显式指定。
+> xian 的 traj 输入: `--traj_dir <dir>` 读 `region_{id}_traj.png` (真实GPS轨迹, 非 active.png)。
 
 
 # new infer (single and auto-param)

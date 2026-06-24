@@ -6,7 +6,7 @@ SAM-Road Completion v2 Dataset
 v2 变更 (对齐方案B):
   1. road_feature_map: 2通道 (ch0=已知路mask, ch1=已知节点位置), 去掉距离场和方向场
   2. 动态 keep_ratio: 每次采样随机 U[0.2, 0.8], 不固定0.5
-  3. 支持 traj_heatmap: Xian 数据集加载 active.png, 其他数据集返回全零
+  3. 支持 traj_heatmap: Xian 数据集加载 traj.png (真实GPS轨迹), 其他数据集返回全零
   4. 修复 known_edge_index: 正确映射到 NMS 后节点索引
   5. 修复特征图一致性: 渲染和标签使用同一组删边
   6. 模态 Dropout: 20%概率清空所有先验 (road_feature_map + traj_heatmap + known_edge_index)
@@ -492,7 +492,7 @@ class SatMapCompletionDataset(Dataset):
     v2 变更:
       1. road_feature_map: 2通道 (mask + 节点位置)
       2. 动态 keep_ratio: 每次 refresh 随机 U[0.2, 0.8]
-      3. 支持 traj_heatmap: Xian 加载 active.png, 其他返回全零
+      3. 支持 traj_heatmap: Xian 加载 traj.png (真实GPS轨迹), 其他返回全零
       4. known_edge_index: 正确映射到 NMS 节点索引
       5. 特征图一致性: 渲染和标签使用同一组删边
       6. 模态 Dropout: 20%清空所有先验
@@ -543,8 +543,8 @@ class SatMapCompletionDataset(Dataset):
             road_mask_pattern = 'datasets/didi/xian/processed/road_mask_{}.png'
             # gt_graph 文件在 xian_2019_400/ 子目录里, 不是 2019_400/ 顶层
             gt_graph_pattern = 'datasets/didi/xian/2019_400/region_{}_refine_gt_graph.p'
-            # Xian 有 traj: active.png 作为热力图
-            active_mask_pattern = 'datasets/didi/xian/2019_400/region_{}_active.png'
+            # Xian 有 traj: traj.png (DelvMap 真实快递员 GPS 轨迹二值图, 已对齐)
+            active_mask_pattern = 'datasets/didi/xian/2019_400/region_{}_traj.png'
             train, val, test = didi_data_partition()
             # DiDi Xian uses (row, col) coordinate format, same as Cityscale (NOT SpaceNet's (y_up, x))
             coord_transform = lambda v: v[:, ::-1]

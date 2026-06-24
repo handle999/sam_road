@@ -1,5 +1,41 @@
 # Changelog
 
+## [2026-06-24] Completion: traj 换真实轨迹 + partial rn 固定采样 (train/infer 一致)
+
+### traj 文件: active.png → traj.png (xian completion)
+- completion 模型原先用 `region_{c}_active.png` (DiDi 路网矢量栅格化) 当轨迹输入, 改为
+  `region_{c}_traj.png` (DelvMap 真实快递员 GPS 轨迹二值图, 已制备对齐)。
+- 训练 [data/dataset_completion.py:547] + 推理 [engine/inferencer_completion.py:112] + config 注释同步。
+- spacenet/cityscale 无 traj, 不变。
+
+### partial rn 固定采样 (infer 用, 与训练策略对齐)
+- **问题**: 推理 `--input_graph_dir` 原本指向完整的 `refine_gt_graph.p`, 而训练时 rn 是
+  随机删边的部分子图 (keep_ratio∈[0.2,0.8], 每 epoch 重采样) —— train/infer 不一致。
+- **修复**:
+  - [data/generate_partial_prior.py] 加 `--seed` (默认42, 可复现) + 只采样训练/推理实际用的 GT 图
+    (didi `refine_gt_graph.p` / spacenet `__gt_graph.p`), 排除评测 GT (graph_gt.pickle) 和 dense 变体。
+  - 离线预生成 partial rn (keep_ratio=0.5, seed=42): didi 378 个 + spacenet 2549 个,
+    `_partial.p` + `_partial.png` 存原数据目录。
+  - [engine/inferencer_completion.py] `load_known_graph` 默认读 `_partial.p` (didi/spacenet 分支),
+    与训练"部分子图"策略对齐。想喂完整图做上界测试, 用 `--input_graph` 显式指定。
+- **策略**: 训练仍每 epoch 随机 [0.2,0.8] (多样性), infer 固定 0.5 + seed=42 (复现); 两者都是
+  "随机选边删边"同一策略, 仅比例/种子固定 —— 符合 train 多样性 / infer 复现的要求。
+
+### 生成 partial rn 命令
+```bash
+python data/generate_partial_prior.py --dataset didi \
+    --input_dir datasets/didi/xian/2019_400 --output_dir datasets/didi/xian/2019_400 \
+    --keep_ratio 0.5 --seed 42
+python data/generate_partial_prior.py --dataset spacenet \
+    --input_dir datasets/spacenet/RGB_1.0_meter --output_dir datasets/spacenet/RGB_1.0_meter \
+    --keep_ratio 0.5 --seed 42
+```
+
+### 验证
+- didi region_0: full edges=184, partial edges=92 (ratio=0.500) ✓
+- spacenet: 2549 个 partial 生成, dense 变体正确排除 ✓
+- traj.png 加载正常 (region_0 nonzero=71897) ✓
+
 ## [2026-06-24] Xian 数据集重建: 对齐 DelvMap traj + 目录扁平化 + NW 编号
 
 ### Xian 数据集重建 (didi_xian)
