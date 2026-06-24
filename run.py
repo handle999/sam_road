@@ -143,12 +143,23 @@ def build_profile(args, task, dataset, run_id, config_path):
 # 命令构造
 # ---------------------------------------------------------------------------
 def _gpu_env(gpus):
-    """设置 CUDA_VISIBLE_DEVICES, 返回 env dict."""
+    """设置 CUDA_VISIBLE_DEVICES, 返回 env dict.
+
+    run.py 的 --gpus 使用"物理 GPU id"语义, 例如 --gpus 7 或 --gpus 2,3。
+    子进程设置 CUDA_VISIBLE_DEVICES 后, PyTorch/Lightning 只能看到逻辑 GPU:
+      CUDA_VISIBLE_DEVICES=7   → 子进程里只有 cuda:0
+      CUDA_VISIBLE_DEVICES=2,3 → 子进程里 cuda:0,cuda:1 分别映射物理 2,3
+    因此传给底层 train 脚本的 --gpus 必须用逻辑编号, 见 _logical_gpus().
+    """
     env = os.environ.copy()
-    # 取第一个 gpu 作为可见设备 (多 gpu 训练时 train 脚本自己处理 devices 列表)
-    first_gpu = gpus.split(',')[0].strip()
-    env['CUDA_VISIBLE_DEVICES'] = first_gpu
+    env['CUDA_VISIBLE_DEVICES'] = ','.join(x.strip() for x in gpus.split(',') if x.strip())
     return env
+
+
+def _logical_gpus(gpus):
+    """把物理 GPU 列表转为 CUDA_VISIBLE_DEVICES 后的逻辑编号列表."""
+    visible = [x.strip() for x in gpus.split(',') if x.strip()]
+    return ','.join(str(i) for i in range(len(visible))) if visible else '0'
 
 
 def build_train_cmd(args, task, run_id, config_path):
@@ -157,7 +168,9 @@ def build_train_cmd(args, task, run_id, config_path):
     cmd = [
         sys.executable, '-m', task_info['train_script'],
         '--config', config_path,
-        '--gpus', args.gpus,
+        # 注意: run.py --gpus 是物理 id; 子进程已设置 CUDA_VISIBLE_DEVICES,
+        # 因此传给 Lightning 的 devices 必须是逻辑 id (单卡物理7 → 逻辑0)。
+        '--gpus', _logical_gpus(args.gpus),
         '--run-root', rp['run_root'],
     ]
     if args.precision:
