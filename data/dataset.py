@@ -56,7 +56,7 @@ def spacenet_data_partition():
 
 def didi_xian_data_partition():
     """Dataset partition for DiDi Xian (2019_400)."""
-    with open('datasets/didi/xian/2019_400/data_split.json','r') as jf:
+    with open('datasets/didi/xian/data_split.json','r') as jf:
         data_list = json.load(jf)
     train_list = data_list['train']
     val_list = data_list['validation']
@@ -357,10 +357,10 @@ class SatMapDataset(Dataset):
             self.IMAGE_SIZE = 400
             self.SAMPLE_MARGIN = 0  # same as spacenet
 
-            rgb_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_sat.png'
-            keypoint_mask_pattern = 'datasets/didi/xian/2019_400/processed/keypoint_mask_{}.png'
-            road_mask_pattern = 'datasets/didi/xian/2019_400/processed/road_mask_{}.png'
-            gt_graph_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_refine_gt_graph.p'
+            rgb_pattern = 'datasets/didi/xian/2019_400/region_{}_sat.png'
+            keypoint_mask_pattern = 'datasets/didi/xian/processed/keypoint_mask_{}.png'
+            road_mask_pattern = 'datasets/didi/xian/processed/road_mask_{}.png'
+            gt_graph_pattern = 'datasets/didi/xian/2019_400/region_{}_refine_gt_graph.p'
 
             train, val, test = didi_xian_data_partition()
 

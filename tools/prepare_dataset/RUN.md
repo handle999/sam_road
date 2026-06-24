@@ -515,24 +515,51 @@ xml.etree.ElementTree.ParseError: unclosed token: line 2058, column 2
 
 ```
 
-# 修改后：完整数据集
+# 修改后：完整数据集（2026-06-24 重建, 对齐 DelvMap）
 
-可以使用pbf生成label，以及shp生成input（traj）
+使用 pbf 生成 rn 标签、shp 生成 active 输入、DelvMap 大图生成 sat 与 traj。配置 `config/xian.json` (size=400, DelvMap 西安 bbox, 378 块, NW-first 编号)。
+
+> 关键改动:
+> - bbox 统一到 DelvMap 西安范围 lat[34.206385,34.279658] lon[108.917423,108.99286], 378 块 (原 575).
+> - 编号 NW-first (左上→右下).
+> - 卫星图支持 `--sat_source local:<png>` 复用 DelvMap `sat_img.png` (ESRI 不可达时), 按经纬度 Mercator 重投影.
+> - 边缘 tile 下边/右边补黑; rn/active 用 clip_bbox 裁到 DelvMap extent, 与 sat/traj 黑边一致.
+> - 目录扁平: region 文件直接在 `datasets/didi/xian/2019_400/`, processed/ 与 data_split.json 在上一层.
+> - 新增 `generate_traj.py` 生成 `region_{c}_traj.png` (DelvMap 真实 GPS 轨迹).
 
 ```shell
-cd utils/prepare_dataset
+# 从 datasets/didi/xian/2019_400/ 目录运行 (输出直接在此, 扁平结构)
+cd datasets/didi/xian/2019_400
 
-# 原始：sat + pbf
-python download_use_osm.py \
-    --dataset_type original \
-    --osm_pbf ../../xian/osm/xian-plus-190101.osm.pbf \
-    ./config/xian.json
-
-# 增强：sat + traj + pbf
-python download_use_osm.py \
+# 1. sat + GT路网图(rn) + active (trajectory 模式)
+#    ESRI 不可达时用 --sat_source local: 复用 DelvMap sat_img.png
+PYTHONPATH=<repo>/tools/prepare_dataset python <repo>/tools/prepare_dataset/download_use_osm.py \
     --dataset_type trajectory \
-    --osm_pbf ../../xian/osm/xian-plus-190101.osm.pbf \
-    --active_shp ../../xian/osm/rn-comp-xa-190101-seg5/edges.shp \
-    ./config/xian.json
+    --osm_pbf ../osm/xian-plus-190101.osm.pbf \
+    --active_shp ../osm/rn-comp-xa-190101-seg5/edges.shp \
+    --sat_source local:/path/to/DelvMap/rawdata/sat_img.png \
+    <repo>/tools/prepare_dataset/config/xian.json
+#    (联网可用时去掉 --sat_source 行, 走默认 ESRI z17)
 
+# 2. road_mask / keypoint_mask (从 2019_400/ 运行, 输出到上一层 processed/)
+python <repo>/datasets/didi/xian/generate_labels.py --root .
+
+# 3. 真实轨迹 traj (从 repo 根运行, 生成 region_{c}_traj.png)
+python tools/prepare_dataset/generate_traj.py \
+    --config tools/prepare_dataset/config/xian.json \
+    --traj-png /path/to/DelvMap/rawdata/traj_heat.png \
+    --out-dir datasets/didi/xian/2019_400 \
+    --mode traj --qc
+#    --mode traj (3x3闭运算, 默认, 更像路网) | point (仅二值化)
+
+# 4. data_split.json (302/37/39)
+python data/img_folder_to_json_list.py
 ```
+
+依赖: `osmium`, `gdal` (读 shp), `numpy`, `opencv`。samroad conda env 安装:
+```shell
+pip install osmium
+conda install -c conda-forge --override-channels gdal   # 会带 numpy 2.x, 需降回: conda install -c conda-forge --override-channels numpy=1.26.4
+```
+
+对齐验证: `generate_traj.py --qc` 打印城市四角 extent 闸 + 抽样 IoU; traj vs DelvMap 原生栅格 IoU ≈ 0.7-0.8。

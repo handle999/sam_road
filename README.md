@@ -72,8 +72,9 @@ RGB + road_feature_map [B,4,H,W]
 | **图片尺寸** | 2048×2048 | 400×400 | 400×400 |
 | **pickle 原点** | 左上（图像坐标） | 左下（数学坐标） | 左上（图像坐标） |
 | **coord_transform** | `v[:, ::-1]`（swap） | `np.stack([v[:,1], SIZE-v[:,0]])`（swap+flip-y） | `v[:, ::-1]`（swap） |
-| **样本数** | 180 | 2549 | ~400 |
+| **样本数** | 180 | 2549 | 378 |
 | **Active mask** | ✗ | ✗ | ✓ |
+| **真实轨迹 traj** | ✗ | ✗ | ✓ (`region_{c}_traj.png`) |
 
 > ⚠️ SpaceNet 的 pickle 使用数学坐标系（y 轴从下向上），需要翻转 y 轴。CityScale/Xian 使用图像坐标系（row 从上向下），只需交换。
 
@@ -101,7 +102,12 @@ sam_road/
 ├── datasets/          # 原始数据 & generate_labels.py
 │   ├── cityscale/
 │   ├── spacenet/
-│   └── didi/xian/
+│   └── didi/xian/              # 2019_400/ (region 文件, 含 traj.png), processed/, data_split.json
+├── tools/prepare_dataset/      # 数据制备脚本
+│   ├── download_use_osm.py     # sat+rn+active (支持 --sat_source local + NW 编号 + clip_bbox)
+│   ├── generate_traj.py        # 生成 region_{c}_traj.png (DelvMap 真实轨迹, 已对齐)
+│   ├── graph_ops.py / esri.py
+│   └── config/xian.json        # size=400, DelvMap 西安 bbox
 ├── docs/              # 文档
 │   ├── 数据集与坐标系分析.md   # 坐标系详细分析
 │   ├── 方案B_路网补全设计.md   # 补全模型设计文档
@@ -236,6 +242,31 @@ sam_road/sam_ckpts/sam_vit_b_01ec64.pth
 cd datasets/spacenet && python generate_labels.py
 cd datasets/cityscale && python generate_labels.py
 ```
+
+**Xian (DiDi)** 数据集本地制备（sat + rn + active + traj，378 块，对齐 DelvMap 范围）：
+```bash
+# 1. sat + GT路网图 + active (从 2019_400/ 目录运行; ESRI 不可达时用 DelvMap sat 大图)
+cd datasets/didi/xian/2019_400
+PYTHONPATH=../../../tools/prepare_dataset python ../../../tools/prepare_dataset/download_use_osm.py \
+    --dataset_type trajectory \
+    --osm_pbf ../osm/xian-plus-190101.osm.pbf \
+    --active_shp ../osm/rn-comp-xa-190101-seg5/edges.shp \
+    --sat_source local:/path/to/DelvMap/rawdata/sat_img.png \
+    ../../../tools/prepare_dataset/config/xian.json
+
+# 2. road_mask / keypoint_mask (从 2019_400/ 运行, 输出到上一层 processed/)
+python ../../../datasets/didi/xian/generate_labels.py --root .
+
+# 3. 真实轨迹 traj (从 repo 根运行)
+python tools/prepare_dataset/generate_traj.py \
+    --config tools/prepare_dataset/config/xian.json \
+    --traj-png /path/to/DelvMap/rawdata/traj_heat.png \
+    --out-dir datasets/didi/xian/2019_400 --mode traj --qc
+
+# 4. data_split.json (302/37/39)
+python data/img_folder_to_json_list.py
+```
+详见 [docs/数据集与坐标系分析.md](docs/数据集与坐标系分析.md) §2.2.1 与 [tools/prepare_dataset/RUN.md](tools/prepare_dataset/RUN.md)。
 
 ### 训练
 
@@ -390,7 +421,7 @@ save/<前缀>_<timestamp>/
 |---|---|---|
 | `--input_graph` | `None` | 单个已知路网 pickle 文件路径（邻接表格式） |
 | `--input_graph_dir` | `None` | 已知路网 pickle 目录（每个 region 一个 .p 文件） |
-| `--traj_dir` | `None` | 轨迹热力图目录（仅 Xian 数据集，active.png） |
+| `--traj_dir` | `None` | 轨迹热力图目录（仅 Xian 数据集，默认 `region_{c}_active.png`；也可指向 `generate_traj.py` 生成的 `region_{c}_traj.png` 真实 GPS 轨迹） |
 
 **4 通道模型专属参数**（仅 `inferencer_4ch.py`）：
 

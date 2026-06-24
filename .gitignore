@@ -8,6 +8,7 @@ datasets/spacenet/processed/
 datasets/spacenet/sample_*
 datasets/spacenet/sat*
 datasets/didi/xian/*
+!datasets/didi/xian/generate_labels.py
 datasets/didi/chengdu/*
 
 # Model checkpoints and outputs
@@ -57,3 +58,6 @@ utils/prepare_dataset/
 # Lightning CSVLogger / runtime training logs (dynamic, written during training)
 train_logs/csv_completion/
 train_logs/csv/
+
+# macOS
+.DS_Store

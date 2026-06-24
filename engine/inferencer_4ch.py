@@ -358,15 +358,15 @@ if __name__ == "__main__":
         rgb_pattern = './datasets/spacenet/RGB_1.0_meter/{}__rgb.png'
         gt_graph_pattern = './datasets/spacenet/RGB_1.0_meter/{}__gt_graph.p'
     elif config.DATASET in ('didi', 'didi_xian'):
-        with open('datasets/didi/xian/2019_400/data_split.json','r') as jf:
+        with open('datasets/didi/xian/data_split.json','r') as jf:
             import json
             data_list = json.load(jf)
             train_img_indices = data_list['train']
             val_img_indices = data_list['validation']
             test_img_indices = data_list['test']
 
-        rgb_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_sat.png'
-        gt_graph_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_graph_gt.pickle'
+        rgb_pattern = 'datasets/didi/xian/2019_400/region_{}_sat.png'
+        gt_graph_pattern = 'datasets/didi/xian/2019_400/region_{}_graph_gt.pickle'
     else:
         raise ValueError(f"Unknown dataset type: {config.DATASET}")
     
@@ -412,7 +412,7 @@ if __name__ == "__main__":
             elif config.DATASET == 'spacenet':
                 partial_prior_path = f'./datasets/spacenet/RGB_1.0_meter/{img_id}__gt.png'
             elif config.DATASET in ('didi', 'didi_xian'):
-                partial_prior_path = f'datasets/didi/xian/2019_400/xian_2019_400/region_{img_id}_gt.png'
+                partial_prior_path = f'datasets/didi/xian/2019_400/region_{img_id}_gt.png'
             
             if os.path.exists(partial_prior_path):
                 partial_img = cv2.imread(partial_prior_path, cv2.IMREAD_GRAYSCALE)

@@ -54,7 +54,7 @@ def spacenet_data_partition():
 
 
 def didi_data_partition():
-    with open('datasets/didi/xian/2019_400/data_split.json', 'r') as jf:
+    with open('datasets/didi/xian/data_split.json', 'r') as jf:
         data_list = json.load(jf)
     return data_list['train'], data_list['validation'], data_list['test']
 
@@ -538,13 +538,13 @@ class SatMapCompletionDataset(Dataset):
             self.IMAGE_SIZE = 400
             self.SAMPLE_MARGIN = 0
             # 路径与 dataset.py 已修复的 didi_xian 分支保持一致 (相对项目根)
-            rgb_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_sat.png'
-            keypoint_mask_pattern = 'datasets/didi/xian/2019_400/processed/keypoint_mask_{}.png'
-            road_mask_pattern = 'datasets/didi/xian/2019_400/processed/road_mask_{}.png'
+            rgb_pattern = 'datasets/didi/xian/2019_400/region_{}_sat.png'
+            keypoint_mask_pattern = 'datasets/didi/xian/processed/keypoint_mask_{}.png'
+            road_mask_pattern = 'datasets/didi/xian/processed/road_mask_{}.png'
             # gt_graph 文件在 xian_2019_400/ 子目录里, 不是 2019_400/ 顶层
-            gt_graph_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_refine_gt_graph.p'
+            gt_graph_pattern = 'datasets/didi/xian/2019_400/region_{}_refine_gt_graph.p'
             # Xian 有 traj: active.png 作为热力图
-            active_mask_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_active.png'
+            active_mask_pattern = 'datasets/didi/xian/2019_400/region_{}_active.png'
             train, val, test = didi_data_partition()
             # DiDi Xian uses (row, col) coordinate format, same as Cityscale (NOT SpaceNet's (y_up, x))
             coord_transform = lambda v: v[:, ::-1]

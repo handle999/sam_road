@@ -1,5 +1,31 @@
 # Changelog
 
+## [2026-06-24] Xian 数据集重建: 对齐 DelvMap traj + 目录扁平化 + NW 编号
+
+### Xian 数据集重建 (didi_xian)
+- **bbox 统一到 DelvMap 西安范围**: lat[34.206385, 34.279658] lon[108.917423, 108.99286] (`tools/prepare_dataset/config/xian.json`)，size=400，共 **378 块 (21×18)**（原 575 块作废）。
+- **编号改为 NW-first**: tile 从左上角(NW)开始行优先 TL→BR (i=0=最北行, j=0=最西列)。
+- **新增真实轨迹模态 `region_{c}_traj.png`**: 从 DelvMap `rawdata/traj_heat.png` (5625×6610 Web Mercator 快递员 GPS 二值热力图) 按经纬度逐像素 Mercator 重投影采样进每个 tile，二值化 + 可选 3×3 闭运算，与 sat 同公式对齐 (traj vs DelvMap 原生栅格 IoU ≈ 0.7-0.8)。
+- **卫星图支持本地源**: `download_use_osm.py --sat_source local:<png>` 复用 DelvMap `sat_img.png` (ESRI 不可达时)，按经纬度 Mercator 重投影采样。
+- **边缘 tile 补黑一致**: sat/traj/rn/active 超出 DelvMap 大图范围的像素 (下边/右边) 一律补黑；rn/active 用 `clip_bbox` 裁到 DelvMap extent，不画黑边区域的路，四模态黑边对齐。
+
+### 目录结构扁平化 (对齐 cityscale/spacenet)
+- region 文件从 `2019_400/xian_2019_400/` 上提到 `2019_400/` (不再双层嵌套)。
+- `processed/` 与 `data_split.json` 上提到与 `2019_400/` 同级 (即 `datasets/didi/xian/{2019_400/, processed/, data_split.json}`)。
+- 批量更新 9 个 loader/inferencer 路径: `data/dataset.py`, `data/dataset_4ch.py`, `data/dataset_completion.py`, `data/dataset_registry.py`, `data/visualize_coord.py`, `data/img_folder_to_json_list.py`, `engine/inferencer.py`, `engine/inferencer_4ch.py`, `engine/inferencer_completion.py`, `tools/registry.py`。
+
+### 新增脚本
+- `tools/prepare_dataset/generate_traj.py`: 生成 `region_{c}_traj.png`，含 sanity 闸 (sat 数量==lat_n×lon_n) 与 `--qc` (extent 闸 + 抽样叠加 + IoU)。
+- `tools/prepare_dataset/download_use_osm.py` 新增参数: `--sat_source`, `--sat_local_extent`；新增 NW-first 编号、本地 sat 重投影 (edge zero-pad)、`clip_bbox` 裁 rn/active。
+- `datasets/didi/xian/generate_labels.py`: IMAGE_SIZE 修回 400，路径 argparse 化 (注: 该文件在 gitignore 的 datasets/ 下，不入库)。
+
+### 数据划分
+- 378 块 → train 302 / val 37 / test 39 (seed=42)，`data_split.json` 重生成。
+
+### 坐标系说明 (澄清)
+- didi_xian tile 内部坐标系为 **WGS84 线性像素坐标，左上原点 y-down (北在顶)**，节点坐标 (y, x)，与 CityScale 一致。运行时 loader (`dataset.py:368`, `dataset_4ch.py`) 使用 `coord_transform = v[:, ::-1]` (swap, 无翻转)。
+- ⚠️ 注意: `data/dataset_registry.py` 中 `didi_xian` 条目仍标记为 `bottom-left / (y_up,x) / need_y_flip=True` (与 2026-06-06 条目一致)，但运行时 loader 实际走 top-left swap 分支，二者不一致。registry 的 flip 标记目前未被训练主路径使用，属已知遗留，未在本轮修改。
+
 ## [2026-06-06] Dataset Restructuring & Coordinate System Fix
 
 ### Directory Structure Refactoring

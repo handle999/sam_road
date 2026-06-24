@@ -1,11 +1,11 @@
 [
 	{
-		"region":"xian", 
+		"region":"xian",
 		"year":"2019",
-		"size":1024,
-		"lat_min":34.20,
-		"lon_min":108.91, 
-		"lat_max":34.29, 
-		"lon_max":109.01
+		"size":400,
+		"lat_min":34.206385,
+		"lon_min":108.917423,
+		"lat_max":34.279658,
+		"lon_max":108.99286
 	}
 ]

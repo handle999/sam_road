@@ -56,7 +56,7 @@ def spacenet_data_partition():
 
 def didi_xian_data_partition():
     """Dataset partition for DiDi Xian (2019_400)."""
-    with open('datasets/didi/xian/2019_400/data_split.json','r') as jf:
+    with open('datasets/didi/xian/data_split.json','r') as jf:
         data_list = json.load(jf)
     train_list = data_list['train']
     val_list = data_list['validation']
@@ -264,9 +264,9 @@ def test_graph_label_generator():
         coord_transform = lambda v : np.stack([v[:, 1], 400 - v[:, 0]], axis=1)
         # coord_transform = lambda v : v[:, ::-1]
     elif dataset == 'didi':
-        rgb_path = 'datasets/didi/xian/2019_400/xian_2019_400/region_370_sat.png'
+        rgb_path = 'datasets/didi/xian/2019_400/region_370_sat.png'
         # Load GT Graph
-        gt_graph = pickle.load(open(f"./xian/2019_400/xian_2019_400/region_370_refine_gt_graph.p",'rb'))
+        gt_graph = pickle.load(open(f"./xian/2019_400/region_370_refine_gt_graph.p",'rb'))
         coord_transform = lambda v : v[:, ::-1]
         
     rgb = read_rgb_img(rgb_path)
@@ -383,17 +383,17 @@ class SatMapDataset(Dataset):
             self.IMAGE_SIZE = 400
             self.SAMPLE_MARGIN = 0  # same as spacenet
 
-            rgb_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_sat.png'
+            rgb_pattern = 'datasets/didi/xian/2019_400/region_{}_sat.png'
 
             # DiDi Xian has dedicated active masks from trajectory data
             if self.is_train:
-                active_mask_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_active.png'
+                active_mask_pattern = 'datasets/didi/xian/2019_400/region_{}_active.png'
             else:
                 active_mask_pattern = 'datasets/didi/xian/2019_400/sample_0.5/region_{}_refine_gt_graph_partial.png'
 
-            keypoint_mask_pattern = 'datasets/didi/xian/2019_400/processed/keypoint_mask_{}.png'
-            road_mask_pattern = 'datasets/didi/xian/2019_400/processed/road_mask_{}.png'
-            gt_graph_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_refine_gt_graph.p'
+            keypoint_mask_pattern = 'datasets/didi/xian/processed/keypoint_mask_{}.png'
+            road_mask_pattern = 'datasets/didi/xian/processed/road_mask_{}.png'
+            gt_graph_pattern = 'datasets/didi/xian/2019_400/region_{}_refine_gt_graph.p'
 
             train, val, test = didi_xian_data_partition()
             # DiDi Xian uses (row, col) coordinate format, same as Cityscale (NOT SpaceNet's (y_up, x))

@@ -278,15 +278,15 @@ if __name__ == "__main__":
     elif config.DATASET == 'didi_xian':
         # def spacenet_data_partition():
         # dataset partition
-        with open('datasets/didi/xian/2019_400/data_split.json','r') as jf:
+        with open('datasets/didi/xian/data_split.json','r') as jf:
             import json
             data_list = json.load(jf)
             train_img_indices = data_list['train']
             val_img_indices = data_list['validation']
             test_img_indices = data_list['test']
 
-        rgb_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_sat.png'
-        gt_graph_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_graph_gt.pickle'
+        rgb_pattern = 'datasets/didi/xian/2019_400/region_{}_sat.png'
+        gt_graph_pattern = 'datasets/didi/xian/2019_400/region_{}_graph_gt.pickle'
     
     # 输出目录: 优先 run-root 统一目录, 否则老 save/ 路径
     if args.run_root:

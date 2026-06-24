@@ -91,8 +91,8 @@ DATASETS = {
     },
     'didi_xian': {
         'eval_dataset_name': 'didi_xian',
-        'infer_input_graph_dir': 'datasets/didi/xian/2019_400/xian_2019_400',
-        'infer_traj_dir': 'datasets/didi/xian/2019_400/xian_2019_400',
+        'infer_input_graph_dir': 'datasets/didi/xian/2019_400',
+        'infer_traj_dir': 'datasets/didi/xian/2019_400',
     },
     'cityscale': {
         'eval_dataset_name': 'cityscale',

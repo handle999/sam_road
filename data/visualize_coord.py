@@ -43,8 +43,8 @@ def visualize_cityscale(region_id):
     plt.close()
 
 def visualize_didi_xian(region_id):
-    sat_path = f"datasets/didi/xian/2019_400/xian_2019_400/region_{region_id}_sat.png"
-    gt_path = f"datasets/didi/xian/2019_400/xian_2019_400/region_{region_id}_graph_gt.pickle"
+    sat_path = f"datasets/didi/xian/2019_400/region_{region_id}_sat.png"
+    gt_path = f"datasets/didi/xian/2019_400/region_{region_id}_graph_gt.pickle"
     img = load_img(sat_path)
     img_size = img.shape[0]
     nodes, edges, _ = load_graph(gt_path)

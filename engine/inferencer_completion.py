@@ -579,7 +579,7 @@ if __name__ == "__main__":
         rgb_pattern = './datasets/spacenet/RGB_1.0_meter/{}__rgb.png'
     elif config.DATASET == 'didi' or config.DATASET == 'didi_xian':
         _, _, test_img_indices = didi_data_partition()
-        rgb_pattern = 'datasets/didi/xian/2019_400/xian_2019_400/region_{}_sat.png'
+        rgb_pattern = 'datasets/didi/xian/2019_400/region_{}_sat.png'
 
     # 输出目录: 优先 run-root 统一目录, 否则老 save/ 路径
     if args.run_root:

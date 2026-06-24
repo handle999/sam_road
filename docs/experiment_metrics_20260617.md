@@ -89,7 +89,7 @@
 
 1. **Completion 正式评估应补跑带先验版本**：
    - SpaceNet：`--input_graph_dir datasets/spacenet/RGB_1.0_meter`
-   - Xian：`--input_graph_dir datasets/didi/xian/2019_400/xian_2019_400 --traj_dir datasets/didi/xian/2019_400/xian_2019_400`
+   - Xian：`--input_graph_dir datasets/didi/xian/2019_400 --traj_dir datasets/didi/xian/2019_400`
 2. **Xian 指标口径需继续确认**：metric 当前使用 `region_{}_graph_gt.pickle`，训练使用 refine 图；这保持了历史 metric 口径，但会与训练目标略有差异。
 3. **已完成全部当前 `save/infer*` 目录评估**：本文列出的 11 个输出目录均已纳入汇总。
 
@@ -117,8 +117,8 @@ python -m engine.inferencer \
 python -m engine.inferencer_completion \
   --config config/toponet_vitb_256_didi_xian_completion.yaml \
   --checkpoint "checkpoints/samroad_completion_didi_xian/<ckpt>" \
-  --input_graph_dir datasets/didi/xian/2019_400/xian_2019_400 \
-  --traj_dir datasets/didi/xian/2019_400/xian_2019_400
+  --input_graph_dir datasets/didi/xian/2019_400 \
+  --traj_dir datasets/didi/xian/2019_400
 
 # Metric
 cd metrics

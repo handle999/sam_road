@@ -75,7 +75,7 @@ def generate_data_split_from_cases(
 
 if __name__ == "__main__":
     # ======= 你只需要改这里 =======
-    data_root = "./datasets/didi/xian/xian_2019_400/"
+    data_root = "./datasets/didi/xian/2019_400/"
     save_path = "./datasets/didi/xian/data_split.json"
 
     generate_data_split_from_cases(
