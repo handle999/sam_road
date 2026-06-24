@@ -90,7 +90,7 @@ def eval_apls(dataset, target_dir, workers=None):
     elif dataset == 'spacenet':
         gt_pattern = '../datasets/spacenet/RGB_1.0_meter/{}__gt_graph.p'
     elif dataset == 'didi_xian':
-        gt_pattern = '../datasets/didi/xian/2019_400/xian_2019_400/region_{}_graph_gt.pickle'
+        gt_pattern = '../datasets/didi/xian/2019_400/region_{}_graph_gt.pickle'
 
     if workers is None:
         workers = max(1, (os.cpu_count() or 4) - 2)

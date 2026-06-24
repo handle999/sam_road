@@ -75,7 +75,7 @@ def process_single_tile(tile_idx, savedir, interval, matching_threshold, dataset
     elif dataset == 'spacenet':
         graph_gt_path = f'../datasets/spacenet/RGB_1.0_meter/{tile_idx}__gt_graph.p'
     elif dataset == 'didi_xian':
-        graph_gt_path = f'../datasets/didi/xian/2019_400/xian_2019_400/region_{tile_idx}_graph_gt.pickle'
+        graph_gt_path = f'../datasets/didi/xian/2019_400/region_{tile_idx}_graph_gt.pickle'
     else:
         return f"ERROR: unknown dataset '{dataset}'"
     output_txt = f'../{savedir}/results/topo/{tile_idx}.txt'
