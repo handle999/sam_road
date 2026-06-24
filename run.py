@@ -78,6 +78,8 @@ def build_parser():
     p.add_argument('--eval-opts', default='', help='透传给 eval.py 的额外参数')
     p.add_argument('--no-input-graph', action='store_true',
                    help='completion 推理时不给已知路网 (纯提取退化模式)')
+    p.add_argument('--no-traj', action='store_true',
+                   help='completion 推理时不给轨迹热力图 (与 --no-input-graph 组合可测 3ch 退化)')
     return p
 
 
@@ -122,7 +124,7 @@ def build_profile(args, task, dataset, run_id, config_path):
         'infer': {
             'checkpoint': args.checkpoint,
             'input_graph_dir': None if args.no_input_graph else ds_info['infer_input_graph_dir'],
-            'traj_dir': ds_info['infer_traj_dir'],
+            'traj_dir': None if args.no_traj else ds_info['infer_traj_dir'],
             'device': args.device,
             'extra_opts': args.infer_opts,
         },
@@ -180,7 +182,7 @@ def build_infer_cmd(args, task, dataset, run_id, config_path, ckpt_path):
     if 'completion' in task or '4ch' in task:
         if not args.no_input_graph and ds_info['infer_input_graph_dir']:
             cmd += ['--input_graph_dir', ds_info['infer_input_graph_dir']]
-        if ds_info['infer_traj_dir']:
+        if not args.no_traj and ds_info['infer_traj_dir']:
             cmd += ['--traj_dir', ds_info['infer_traj_dir']]
     if args.infer_opts:
         cmd += args.infer_opts.split()
