@@ -475,7 +475,8 @@ class SatMapDataset(Dataset):
             elif self.config.DATASET == 'spacenet':
                 return 84667
             elif self.config.DATASET == 'didi_xian':
-                return 574 * 200
+                # 339 = train(302)+val(37) tile 数 (新数据 378 块); 与 dataset.py 统一 *50 口径.
+                return 339 * 50
         else:
             return len(self.eval_patches)
 

@@ -85,13 +85,13 @@ DATASET_REGISTRY = {
         "coord_format": "(y_up,x)",
         "coord_transform": lambda v: np.stack([v[:, 1], 400 - v[:, 0]], axis=1),
         "rgb_pattern": "datasets/didi/xian/2019_400/region_{}_sat.png",
-        "active_mask_pattern": "datasets/didi/xian/2019_400/region_{}_active.png",
+        "active_mask_pattern": "datasets/didi/xian/2019_400/region_{}_traj.png",
         "keypoint_mask_pattern": "datasets/didi/xian/processed/keypoint_mask_{}.png",
         "road_mask_pattern": "datasets/didi/xian/processed/road_mask_{}.png",
         "gt_graph_pattern": "datasets/didi/xian/2019_400/region_{}_refine_gt_graph.p",
         "gt_graph_eval_pattern": "datasets/didi/xian/2019_400/region_{}_graph_gt.pickle",
         "data_partition": lambda: _json_data_partition("datasets/didi/xian/data_split.json"),
-        "train_epoch_size": 574 * 200,
+        "train_epoch_size": 339 * 50,   # train(302)+val(37), 与 dataset*.py __len__ 统一 *50 口径
         "need_y_flip_for_sat2graph": True,
     },
 }

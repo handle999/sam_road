@@ -427,7 +427,9 @@ class SatMapDataset(Dataset):
             elif self.config.DATASET == 'spacenet':
                 return 84667
             elif self.config.DATASET == 'didi_xian':
-                return 516 * 50
+                # 339 = train(302)+val(37) tile 数 (新数据 378 块, NW 编号);
+                # 50 = 每 tile 期望采样 patch 数, 覆盖率 ~16x, 与 cityscale/spacenet 对齐.
+                return 339 * 50
         else:
             return len(self.eval_patches)
 

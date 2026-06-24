@@ -627,10 +627,10 @@ class SatMapCompletionDataset(Dataset):
             elif self.config.DATASET == 'spacenet':
                 return 84667
             elif self.config.DATASET == 'didi' or self.config.DATASET == 'didi_xian':
-                # 与 dataset.py 一致 (commit d61cf38): 516 = train+val tile 数,
-                # 50 = 每 tile 期望采样 patch 数, 整体覆盖率约 16x, 与
+                # 339 = train(302)+val(37) tile 数 (新数据 378 块, NW 编号);
+                # 50 = 每 tile 期望采样 patch 数, 覆盖率 ~16x, 与
                 # cityscale (16.3x) / spacenet (16.0x) 对齐, 避免 epoch 过长。
-                return 516 * 50
+                return 339 * 50
         else:
             return len(self.eval_patches)
 
