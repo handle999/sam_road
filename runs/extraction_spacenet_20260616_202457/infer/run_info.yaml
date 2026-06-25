@@ -1,0 +1,36 @@
+script: engine/inferencer.py
+start_time: '2026-06-25 15:48:01'
+end_time: '2026-06-25 16:03:04'
+duration_seconds: 903.47
+host: debian
+output_dir: /home/hanhaoyu/sam_road/runs/extraction_spacenet_20260616_202457/infer
+config_source: config/toponet_vitb_256_spacenet.yaml
+checkpoint: runs/extraction_spacenet_20260616_202457/train/checkpoints/epoch-epoch=09-val_loss=0.1244.ckpt
+command: CUDA_VISIBLE_DEVICES=5 /home/hanhaoyu/miniconda3/envs/SAM/bin/python /home/hanhaoyu/sam_road/engine/inferencer.py
+  --config config/toponet_vitb_256_spacenet.yaml --checkpoint runs/extraction_spacenet_20260616_202457/train/checkpoints/epoch-epoch=09-val_loss=0.1244.ckpt
+  --run-root runs/extraction_spacenet_20260616_202457 --device cuda
+cli_args:
+  checkpoint: runs/extraction_spacenet_20260616_202457/train/checkpoints/epoch-epoch=09-val_loss=0.1244.ckpt
+  run_root: runs/extraction_spacenet_20260616_202457
+  config: config/toponet_vitb_256_spacenet.yaml
+  output_dir: null
+  device: cuda
+env:
+  cuda_visible_devices: '5'
+  omp_num_threads: <not set>
+  mkl_num_threads: <not set>
+  ld_preload: /home/hanhaoyu/miniconda3/envs/SAM/lib/libstdc++.so.6
+  conda_env: SAM
+  python_version: 3.10.19
+  platform: Linux-6.1.0-42-amd64-x86_64-with-glibc2.36
+git:
+  commit: b02ae4c
+  branch: main
+  dirty: false
+torch:
+  torch_version: 2.1.2+cu121
+  cuda_available: true
+  cuda_device_count: 1
+  cuda_version: '12.1'
+task: inference
+model: sam_road
