@@ -1,0 +1,1 @@
+runs/completion_spacenet_20260625_104437/train/checkpoints/completion-epoch=03-val_loss=0.1101.ckpt
