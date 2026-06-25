@@ -1,9 +1,11 @@
-# 2026-06-25 DiDi Xian 实验结果(新数据集 + 坐标 bug 修复后)
+# 2026-06-25 实验结果(新数据集 + 坐标 bug 修复后)
 
-> 本文档记录 didi_xian 数据集在**新数据(378 块,DelvMap 对齐)+ 坐标 bug 修复后**的完整实验,
-> 含 extraction 基线 + completion 四档先验消融(目标 1/2/3 + rn-only)。
+> 本文档记录 didi_xian + spacenet 两个数据集在**新数据 + 坐标 bug 修复后**的实验,
+> 含 extraction 基线 + completion 先验消融。
+> - **didi_xian**:四档完整消融(目标1/2/3 + rn-only),已齐
+> - **spacenet**:completion rn-only 已测,extraction 基线 + 目标1 待补
 >
-> 对比旧文档 [experiment_metrics_20260617.md](experiment_metrics_20260617.md)(旧数据 575 块 + bug 未修)。
+> 对比旧文档 [experiment_metrics_20260617.md](experiment_metrics_20260617.md)(旧数据 + bug 未修)。
 
 ---
 
@@ -123,12 +125,72 @@ extraction 基线            APLS 0.4288  (纯视觉)
 
 ---
 
+## 四b、SpaceNet 结果(completion 0625 已测,消融待补)
+
+### 4b.1 已测结果
+
+spacenet completion 0625 训练完成,用 epoch9 ckpt(val_loss=0.1188)测了 rn-only:
+
+| 实验 | 输入模态 | APLS | TOPO F1 | TOPO P | TOPO R | run_id |
+|------|---------|:---:|:---:|:---:|:---:|--------|
+| **extraction 基线**(历史 0617) | img | 0.7025 | 0.7920 | 0.9288 | 0.6903 | extraction_spacenet_20260616_202457 |
+| **completion rn-only**(0625) | img + rn | **0.7000** | **0.7964** | 0.9305 | 0.6961 | completion_spacenet_20260625_104437 |
+
+> spacenet 无 traj 模态,所以 completion 只有两档:无 rn(目标1,退化)和有 rn(rn-only = 目标3 等价)。
+> extraction 基线用历史 0617 结果(0616 ckpt,代码未变,可直接对比);0625 未重跑 extraction infer+eval。
+
+### 4b.2 关键发现
+
+#### ① completion rn-only ≈ extraction(持平)
+- APLS:0.7000 vs 0.7025(-0.003),TOPO F1:0.7964 vs 0.7920(+0.004)
+- **spacenet 上 completion 给了 rn 先验,效果与 extraction 基本持平**,没有像 didi_xian 那样显著超越
+
+#### ② 与 didi_xian 的对比(关键差异)
+
+| 数据集 | extraction APLS | completion(rn) APLS | rn 增量 |
+|--------|:---:|:---:|:---:|
+| didi_xian | 0.4288 | 0.5878(traj+rn) | **+0.159** (+37%) |
+| spacenet | 0.7025 | 0.7000(rn) | **-0.003** (持平) |
+
+**为什么 spacenet 的 rn 增量为零,而 didi_xian 巨大?** 可能原因:
+
+1. **extraction 基线水平差异**:spacenet extraction 已 0.7025(高基线),路网提取已接近天花板,rn 先验的边际收益小;didi_xian extraction 仅 0.4288(低基线),路网漏检多,rn 补全空间大
+2. **partial prior 质量/keep_ratio**:两个数据集的 partial prior(keep_ratio 0.5)覆盖的路网比例和位置精度可能不同
+3. **spacenet 路网密度**:spacenet(400×400,Vegas)路网较稀疏规则,extraction 已能提全;rnn 先验帮助有限
+
+#### ③ spacenet completion 未超 extraction,是否说明 rn 无用?
+**不能这样下结论**。didi_xian 上 rn 增量 +0.159 证明 rn 在"extraction 漏检多"的场景价值巨大。spacenet 持平是因为 extraction 本身已强。这反而说明:**rn 先验的价值在低基线/复杂场景更突出**,didi_xian(快递员 GPS 场景,路网复杂)正是这类场景。
+
+### 4b.3 spacenet 待补实验
+
+要完整对比 spacenet,需补:
+- **extraction 0616 ckpt 重跑 infer+eval**(确认 0.7025 在当前代码下复现,口径一致)
+- **completion 目标1**(无 rn 退化):用 spacenet completion epoch9 ckpt + `--no-input-graph`,看是否 ≈ extraction
+
+```bash
+# spacenet extraction 基线重跑 (0616 ckpt, 不重训)
+python run.py --task extraction --dataset spacenet \
+    --run-id extraction_spacenet_ep9_rerun \
+    --steps infer,eval \
+    --checkpoint runs/extraction_spacenet_20260616_202457/train/checkpoints/epoch-epoch=09-val_loss=0.1244.ckpt \
+    --gpus 0
+
+# spacenet completion 目标1 (无 rn 退化)
+python run.py --task completion --dataset spacenet \
+    --run-id completion_spacenet_notraj_norn_ep9 \
+    --steps infer,eval \
+    --checkpoint runs/completion_spacenet_20260625_104437/train/checkpoints/completion-epoch=09-val_loss=0.1188.ckpt \
+    --no-input-graph --gpus 0
+```
+
+---
+
 ## 五、待补充实验
 
-### 5.1 spacenet(等 completion 训练完)
-spacenet completion 训练中,训完后需补:
-- extraction 基线(用 0616 ckpt,不需重训,代码未变)
-- completion 目标1/2/3 + rn-only 消融(用 spacenet completion epoch9 ckpt)
+### 5.1 spacenet 消融
+- extraction 基线重跑(命令见 4b.3)
+- completion 目标1(无 rn 退化,命令见 4b.3)
+- 验证:目标1 ≈ extraction(rn 退化正确),rn-only ≥ 目标1
 
 ### 5.2 didi_xian 进一步分析
 - **traj 增量小的原因**:可分析 traj 覆盖率(逐图 traj 与 GT road 的 IoU),确认是 traj 质量还是模型学习问题
