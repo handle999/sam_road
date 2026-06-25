@@ -50,18 +50,22 @@ class PartialGraphSampler:
             # Pickle 中是 (raw_y, raw_x) -> 转换为 X=raw_x, Y=400-raw_y
             self.transform_node = lambda v0, v1: (int(v1), int(self.image_size - v0))
 
-    def sample_graph(self, adj_dict):
+    def sample_graph(self, adj_dict, file_seed=None):
         """
         从完整邻接字典采样 partial 路网 (按 self.strategy 策略)
         :param adj_dict: 原始邻接字典 {node: [neighbor1, ...]}
+        :param file_seed: 每文件独立种子 (基于全局seed+文件名), 保证可复现且与处理顺序无关.
+                          None 时退回全局 random (旧行为, 不推荐).
         :return: 采样后的新邻接字典 (保持原始 pickle 坐标, 不做坐标变换)
         """
+        # 每文件用独立 Random 实例, 隔离随机流 (修复: 同seed两次跑结果不一致)
+        rng = random.Random(file_seed) if file_seed is not None else random
         if self.strategy == 'edge_random':
-            return self._sample_edge_random(adj_dict)
+            return self._sample_edge_random(adj_dict, rng)
         elif self.strategy == 'component':
-            return self._sample_component(adj_dict)
+            return self._sample_component(adj_dict, rng)
         elif self.strategy == 'bfs':
-            return self._sample_bfs(adj_dict)
+            return self._sample_bfs(adj_dict, rng)
         else:
             raise ValueError(f"Unknown strategy: {self.strategy}")
 
@@ -81,7 +85,7 @@ class PartialGraphSampler:
             adj.setdefault(v, []).append(u)
         return adj
 
-    def _sample_edge_random(self, adj_dict):
+    def _sample_edge_random(self, adj_dict, rng):
         """旧策略: 按边随机删 (破碎)"""
         edges = set()
         for u, neighbors in adj_dict.items():
@@ -89,14 +93,14 @@ class PartialGraphSampler:
                 edges.add(tuple(sorted((u, v))))
         edges = list(edges)
         keep_num = int(len(edges) * self.keep_ratio)
-        sampled = random.sample(edges, min(keep_num, len(edges)))
+        sampled = rng.sample(edges, min(keep_num, len(edges)))
         new_adj = {}
         for u, v in sampled:
             new_adj.setdefault(u, []).append(v)
             new_adj.setdefault(v, []).append(u)
         return new_adj
 
-    def _sample_component(self, adj_dict):
+    def _sample_component(self, adj_dict, rng):
         """按连通块保: 小块按keep_ratio概率整块留/删 + 大块BFS生长补足.
         形态: 几个完整路段(小块有抹去概率) + 大路段缺口 = 真实地图.
         块内始终连续不破碎, 块数会减少."""
@@ -111,7 +115,7 @@ class PartialGraphSampler:
         big = [c for c in comps if G.subgraph(c).number_of_edges() > threshold]
         # 小块按 keep_ratio 概率整块保留 (整块留或整块删, 不拆碎)
         for c in small:
-            if random.random() < self.keep_ratio:
+            if rng.random() < self.keep_ratio:
                 kept_edges.extend(G.subgraph(c).edges())
         # 大块 BFS 生长补足
         remaining = target - len(kept_edges)
@@ -120,7 +124,7 @@ class PartialGraphSampler:
                 break
             sub = G.subgraph(c)
             need = min(remaining, int(sub.number_of_edges() * self.keep_ratio))
-            nodes = list(c); random.shuffle(nodes)
+            nodes = list(c); rng.shuffle(nodes)
             visited = {nodes[0]}; queue = [nodes[0]]; tree = []
             while queue and len(tree) < need:
                 node = queue.pop(0)
@@ -136,7 +140,7 @@ class PartialGraphSampler:
             new_adj.setdefault(v, []).append(u)
         return new_adj
 
-    def _sample_bfs(self, adj_dict):
+    def _sample_bfs(self, adj_dict, rng):
         """BFS生长: 从最大块随机种子BFS生长到keep_ratio, 单连通."""
         G = self._adj_to_graph(adj_dict)
         if G.number_of_edges() == 0:
@@ -149,7 +153,7 @@ class PartialGraphSampler:
                 break
             need = target - len(kept_edges)
             sub = G.subgraph(c)
-            nodes = list(c); random.shuffle(nodes)
+            nodes = list(c); rng.shuffle(nodes)
             visited = {nodes[0]}; queue = [nodes[0]]; tree = []
             while queue and len(tree) < need:
                 node = queue.pop(0)
@@ -188,10 +192,12 @@ class PartialGraphSampler:
         
         return img
 
-    def process_file(self, input_p_path, out_p_path, out_png_path=None):
+    def process_file(self, input_p_path, out_p_path, out_png_path=None, file_seed=42):
         """
         处理单个文件：加载 -> 采样 -> 保存 p (-> 可选保存 png)
         :param out_png_path: 若提供则保存 PNG 可视化, None 则跳过
+        :param file_seed: 每张图独立用此 seed (默认42), 保证可复现且与处理顺序无关.
+                          每张图的采样只依赖 file_seed + 该图本身, 不受其他图/空图/顺序影响.
         """
         with open(input_p_path, 'rb') as f:
             original_adj_dict = pickle.load(f)
@@ -200,7 +206,7 @@ class PartialGraphSampler:
             print(f"[Warn] Empty graph found: {input_p_path}")
             sampled_adj_dict = {}
         else:
-            sampled_adj_dict = self.sample_graph(original_adj_dict)
+            sampled_adj_dict = self.sample_graph(original_adj_dict, file_seed=file_seed)
 
         # 保存 Sampled Pickle (原始坐标, 不做变换 — 坐标转换由 load 入口负责)
         with open(out_p_path, 'wb') as f:
@@ -237,7 +243,9 @@ def main():
 
     args = parser.parse_args()
 
-    # 固定随机种子, 保证 infer 用的 partial rn 可复现 (训练侧不用此脚本, 仍每 epoch 随机)
+    # 每张图独立用 args.seed 采样 (见 process_file file_seed), 不依赖全局随机流.
+    # 这样同一 seed 两次运行结果完全一致, 且与文件处理顺序/空图跳过无关.
+    # 全局 random 仍 seed 一下 (np 等其他用途), 但采样本身用 per-file Random 实例.
     random.seed(args.seed)
     np.random.seed(args.seed)
 
@@ -281,7 +289,7 @@ def main():
 
     print(f"Found {len(file_list)} files. Starting sampling (Keep Ratio: {args.keep_ratio}, seed: {args.seed})...")
 
-    print(f"Strategy: {args.strategy}, keep_ratio: {args.keep_ratio}, seed: {args.seed}, viz: {args.viz}")
+    print(f"Strategy: {args.strategy}, keep_ratio: {args.keep_ratio}, seed: {args.seed} (per-file), viz: {args.viz}")
     print(f"Found {len(file_list)} files. Starting sampling...")
 
     for file_path in tqdm(file_list):
@@ -291,7 +299,8 @@ def main():
         out_p_path = os.path.join(args.output_dir, f"{name_without_ext}_partial.p")
         out_png_path = os.path.join(args.output_dir, f"{name_without_ext}_partial.png") if args.viz else None
 
-        sampler.process_file(file_path, out_p_path, out_png_path)
+        # 每张图独立用 args.seed 采样, 可复现且与顺序无关
+        sampler.process_file(file_path, out_p_path, out_png_path, file_seed=args.seed)
 
     print(f"All done! Files saved to {args.output_dir}")
     print(f"  .p files: {len(file_list)}")
