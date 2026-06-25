@@ -1,0 +1,1 @@
+runs/completion_didi_xian_20260625_015832/train/checkpoints/completion-epoch=02-val_loss=0.1750.ckpt

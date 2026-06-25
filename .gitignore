@@ -61,3 +61,7 @@ train_logs/csv/
 
 # macOS
 .DS_Store
+
+# run.py eval per-image intermediates (keep results/*.json summaries only)
+runs/*/infer/results/apls/
+runs/*/infer/results/topo/
