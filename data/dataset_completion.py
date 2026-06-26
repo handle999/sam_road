@@ -510,11 +510,9 @@ class CompletionGraphLabelGenerator:
                 is_known_edge = edge_key in self.known_edge_set_subdivide
 
                 if is_known_edge:
-                    # 方案1: known edge 参与 loss, 标签=True (该边存在, 应连)
-                    # 原: shall_connect=False, valid=False (排除出 loss) → component采样时
-                    # 某些patch全是known edge 无监督, 训练退化. 改为参与loss, 监督均匀.
-                    shall_connect.append(True)
-                    valid_list.append(True)
+                    # 已知边: 不参与 topo loss
+                    shall_connect.append(False)
+                    valid_list.append(False)
                 else:
                     # 未知边: 正常计算
                     shall_connect.append(target_graph_idx in reached_nodes)
@@ -802,16 +800,15 @@ class SatMapCompletionDataset(Dataset):
             # P0-1 修复: 先验已清零, 必须恢复 valid 让真实候选对重新参与 loss.
             # 否则这些步既无先验辅助、又只监督 ~50% 的候选边(已知边被 mask 掉),
             # 严格劣于原版 SAM-Road 的纯 extraction 训练步.
+            # connected 保持原始 BFS 标签 (真实候选对的可达性, padding 自环为 False);
             # 仅把 valid 在"真实候选对 (src!=tgt)"处恢复为 True, zero-pad 自环保持 False.
-            # 注: 方案1 后 known edge 的 connected=True (边客观存在), dropout 步先验虽清空,
-            # 但边本身仍存在, 模型该预测连 → connected=True 仍正确, 无需改.
             # 注: 此处 pairs/valid 为 list-of-tuple 结构 (zip(*topo_samples) 产物, 非 tensor),
             #     逐样本按真实候选对 (src!=tgt) 恢复 valid.
             valid = tuple(
                 tuple((p[0] != p[1]) for p in sample_pairs)
                 for sample_pairs in pairs
             )
-            # connected 已含真实候选对的 BFS/True 标签 + padding 自环的 False, 无需改动
+            # connected 已含真实候选对的 BFS 标签 + padding 自环的 False, 无需改动
 
         # ---- traj 热力图增强 (路径A捷径缓解) ----
         if self.is_train and not drop_all and self.has_traj[img_idx]:
