@@ -555,6 +555,12 @@ class SatMapCompletionDataset(Dataset):
         )
         self.modality_dropout_prob = getattr(config, 'MODALITY_DROPOUT_PROB', 0.2)
         self.traj_dropout_prob = getattr(config, 'TRAJ_DROPOUT_PROB', 0.2)
+        # USE_TRAJ 开关: False 时不加载 traj (训练无 traj 的 completion ckpt, 用于消融)
+        # 默认 True (didi_xian 加载 traj.png, 其他数据集无 traj 文件本就全零)
+        # 注: addict.Dict 对不存在的字段返回空Dict(假值), 用 'USE_TRAJ' in config 判断
+        self.use_traj = config.get('USE_TRAJ', True) if hasattr(config, 'get') else True
+        if self.use_traj == {} or self.use_traj is None:
+            self.use_traj = True
 
         assert self.config.DATASET in {'cityscale', 'spacenet', 'didi', 'didi_xian'}
 
@@ -592,7 +598,8 @@ class SatMapCompletionDataset(Dataset):
             # gt_graph 文件在 xian_2019_400/ 子目录里, 不是 2019_400/ 顶层
             gt_graph_pattern = 'datasets/didi/xian/2019_400/region_{}_refine_gt_graph.p'
             # Xian 有 traj: traj.png (DelvMap 真实快递员 GPS 轨迹二值图, 已对齐)
-            active_mask_pattern = 'datasets/didi/xian/2019_400/region_{}_traj.png'
+            # USE_TRAJ=False 时不加载 (训练无 traj ckpt, 用于消融对比 traj 训练增强价值)
+            active_mask_pattern = 'datasets/didi/xian/2019_400/region_{}_traj.png' if self.use_traj else None
             train, val, test = didi_data_partition()
             # DiDi Xian uses (row, col) coordinate format, same as Cityscale (NOT SpaceNet's (y_up, x))
             coord_transform = lambda v: v[:, ::-1]
