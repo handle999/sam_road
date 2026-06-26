@@ -1,0 +1,40 @@
+script: engine/inferencer_completion.py
+start_time: '2026-06-26 07:00:32'
+end_time: '2026-06-26 07:12:22'
+duration_seconds: 710.27
+host: debian
+output_dir: /home/hanhaoyu/sam_road/runs/completion_spacenet_20260626_032345/infer
+config_source: config/toponet_vitb_256_spacenet_completion.yaml
+checkpoint: runs/completion_spacenet_20260626_032345/train/checkpoints/completion-epoch=09-val_loss=0.1240.ckpt
+command: CUDA_VISIBLE_DEVICES=3 /home/hanhaoyu/miniconda3/envs/SAM/bin/python /home/hanhaoyu/sam_road/engine/inferencer_completion.py
+  --config config/toponet_vitb_256_spacenet_completion.yaml --checkpoint runs/completion_spacenet_20260626_032345/train/checkpoints/completion-epoch=09-val_loss=0.1240.ckpt
+  --run-root runs/completion_spacenet_20260626_032345 --device cuda --input_graph_dir
+  datasets/spacenet/RGB_1.0_meter
+cli_args:
+  checkpoint: runs/completion_spacenet_20260626_032345/train/checkpoints/completion-epoch=09-val_loss=0.1240.ckpt
+  run_root: runs/completion_spacenet_20260626_032345
+  config: config/toponet_vitb_256_spacenet_completion.yaml
+  output_dir: null
+  input_graph: null
+  input_graph_dir: datasets/spacenet/RGB_1.0_meter
+  traj_dir: null
+  device: cuda
+env:
+  cuda_visible_devices: '3'
+  omp_num_threads: <not set>
+  mkl_num_threads: <not set>
+  ld_preload: /home/hanhaoyu/miniconda3/envs/SAM/lib/libstdc++.so.6
+  conda_env: SAM
+  python_version: 3.10.19
+  platform: Linux-6.1.0-42-amd64-x86_64-with-glibc2.36
+git:
+  commit: 513dfc9
+  branch: main
+  dirty: false
+torch:
+  torch_version: 2.1.2+cu121
+  cuda_available: true
+  cuda_device_count: 1
+  cuda_version: '12.1'
+task: inference
+model: sam_road_completion

@@ -5,6 +5,17 @@
 
 ---
 
+## ✅ 完成情况 (2026-06-26)
+
+| 步骤 | 状态 | 产物 / 结果 |
+|---|---|---|
+| 第0步: 服务器准备 / partial 重生成 | ✅ 已完成 | partial 已按连通块保策略重新生成并用于后续 completion 重训 |
+| 实验1: SpaceNet completion 重跑重测 | ✅ 已完成 | `runs/completion_spacenet_20260626_032345`，APLS=0.5293 (358/382)，TOPO F1=0.7009 |
+| 实验2: DiDi Xian completion 重跑重测 | ✅ 已完成 | `runs/completion_didi_xian_20260626_032454`，APLS=0.4571 (35/39)，TOPO F1=0.6316 |
+| 实验3: P2CNet 对比复现 | ⏳ 未开始 | 仍阻塞于 P2CNet 数据格式转换脚本 |
+
+---
+
 ## 第0步:服务器准备(必做,一次性)
 
 ```bash
