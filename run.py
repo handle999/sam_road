@@ -78,6 +78,9 @@ def build_parser():
     p.add_argument('--eval-opts', default='', help='透传给 eval.py 的额外参数')
     p.add_argument('--no-input-graph', action='store_true',
                    help='completion 推理时不给已知路网 (纯提取退化模式)')
+    p.add_argument('--input-graph-dir', default=None,
+                   help='覆写已知路网目录 (默认用 registry 的 infer_input_graph_dir). '
+                        '可指向另一folder的partial, 如 component策略生成的连通块partial')
     p.add_argument('--no-traj', action='store_true',
                    help='completion 推理时不给轨迹热力图 (与 --no-input-graph 组合可测 3ch 退化)')
     return p
@@ -193,8 +196,10 @@ def build_infer_cmd(args, task, dataset, run_id, config_path, ckpt_path):
     ]
     # completion 类推理需要已知路网和轨迹
     if 'completion' in task or '4ch' in task:
-        if not args.no_input_graph and ds_info['infer_input_graph_dir']:
-            cmd += ['--input_graph_dir', ds_info['infer_input_graph_dir']]
+        # --input-graph-dir 覆写 > registry 默认 > --no-input-graph 关闭
+        input_graph_dir = args.input_graph_dir if args.input_graph_dir else ds_info['infer_input_graph_dir']
+        if not args.no_input_graph and input_graph_dir:
+            cmd += ['--input_graph_dir', input_graph_dir]
         if not args.no_traj and ds_info['infer_traj_dir']:
             cmd += ['--traj_dir', ds_info['infer_traj_dir']]
     if args.infer_opts:
