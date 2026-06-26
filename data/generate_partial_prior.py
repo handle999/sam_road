@@ -233,9 +233,9 @@ def main():
                         help="Line thickness for rendered PNG. Default is 3.")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducible sampling (infer 需固定). Default 42.")
-    parser.add_argument("--strategy", type=str, default='component',
+    parser.add_argument("--strategy", type=str, default='edge_random',
                         choices=['edge_random', 'component', 'bfs'],
-                        help="Sampling strategy: edge_random(旧,破碎) / component(按连通块保,推荐) / bfs(单连通). Default component.")
+                        help="Sampling strategy: edge_random(按边随机,默认,训练稳定) / component(按连通块保,不破碎但训练震荡) / bfs(单连通). Default edge_random.")
     parser.add_argument("--viz", action='store_true', default=True,
                         help="Also render PNG visualization (default on). Use --no-viz to disable.")
     parser.add_argument("--no-viz", dest='viz', action='store_false',

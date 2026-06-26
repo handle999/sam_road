@@ -1,7 +1,7 @@
 # 实验执行清单 (TODO)
 
-> 前提:partial 已更新为"按连通块保"策略(seed 42,破碎度 26→2-4 块)。
-> 服务器需先 `git pull` 拿到最新代码,并重新生成 partial(见下方第0步)。
+> **当前状态(2026-06-26)**:partial 采样回退到**按边随机**(component 采样导致训练震荡+退化,详见 `docs/component采样退化分析.md`)。
+> 服务器需先 `git pull` 拿到最新代码,重新生成 partial(按边随机),重训 completion。
 
 ---
 
@@ -9,10 +9,19 @@
 
 | 步骤 | 状态 | 产物 / 结果 |
 |---|---|---|
-| 第0步: 服务器准备 / partial 重生成 | ✅ 已完成 | partial 已按连通块保策略重新生成并用于后续 completion 重训 |
-| 实验1: SpaceNet completion 重跑重测 | ✅ 已完成 | `runs/completion_spacenet_20260626_032345`，APLS=0.5293 (358/382)，TOPO F1=0.7009 |
-| 实验2: DiDi Xian completion 重跑重测 | ✅ 已完成 | `runs/completion_didi_xian_20260626_032454`，APLS=0.4571 (35/39)，TOPO F1=0.6316 |
+| 第0步: 服务器准备 / partial 重生成 | ✅ 已完成 | partial 已按**按边随机**策略重新生成(本地完成,服务器需重跑) |
+| 实验1: SpaceNet completion 重跑重测 | 🔄 需重跑 | 之前 component 版 APLS=0.5293 已作废,需用按边随机重训 |
+| 实验2: DiDi Xian completion 重跑重测 | 🔄 需重跑 | 之前 component 版 APLS=0.4571 已作废,需用按边随机重训 |
 | 实验3: P2CNet 对比复现 | ⏳ 未开始 | 仍阻塞于 P2CNet 数据格式转换脚本 |
+
+### 历史结果(已作废,component 采样)
+
+| 实验 | component 版(已废) | 按边随机 0625 版(基线) |
+|---|:---:|:---:|
+| spacenet completion | APLS 0.5293 | APLS **0.7000**(待复现) |
+| didi_xian completion | APLS 0.4571 | APLS **0.5878**(待复现) |
+
+> component 采样让 APLS 退化 0.17/0.13,且 val_loss 震荡。回退按边随机应恢复 0.70/0.59 水平。
 
 ---
 
@@ -23,26 +32,27 @@ cd ~/sam_road
 git pull origin main
 conda activate samroad
 
-# 重新生成 partial (按连通块保, seed 42, 覆盖旧破碎版)
+# 重新生成 partial (按边随机, seed 42, 覆盖 component 版)
 python data/generate_partial_prior.py --dataset didi \
     --input_dir datasets/didi/xian/2019_400 --output_dir datasets/didi/xian/2019_400 \
-    --keep_ratio 0.5 --seed 42 --strategy component
+    --keep_ratio 0.5 --seed 42 --strategy edge_random
 
 python data/generate_partial_prior.py --dataset spacenet \
     --input_dir datasets/spacenet/RGB_1.0_meter --output_dir datasets/spacenet/RGB_1.0_meter \
-    --keep_ratio 0.5 --seed 42 --strategy component
+    --keep_ratio 0.5 --seed 42 --strategy edge_random
 ```
 
 ---
 
 ## 实验1:spacenet completion 重跑重测
 
-partial 变了,需重训 completion + infer + eval。
+partial 回退按边随机,需重训 completion + infer + eval。目标恢复 APLS 0.70。
 
 ```bash
 python run.py --task completion --dataset spacenet --gpus 0
 # 默认 steps=train,infer,eval, ckpt=auto(best)
 # 产物: runs/completion_spacenet_<新时间戳>/
+# 预期: APLS ~0.70 (恢复0625水平, 之前component版0.53已废)
 ```
 
 ---
@@ -52,6 +62,7 @@ python run.py --task completion --dataset spacenet --gpus 0
 ```bash
 python run.py --task completion --dataset didi_xian --gpus 0
 # 产物: runs/completion_didi_xian_<新时间戳>/
+# 预期: APLS ~0.59 (恢复0625水平, 之前component版0.46已废)
 ```
 
 > 训练侧 `_create_known_graph` 目前仍是旧的按边随机采样。

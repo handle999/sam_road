@@ -302,95 +302,40 @@ class CompletionGraphLabelGenerator:
 
     def _create_known_graph(self):
         """
-        构造已知图 (按连通块保策略, 与推理 generate_partial_prior.py 一致)
+        随机删除部分边, 构造已知图 (按边随机采样)
 
-        策略: 在原始图(路口间整段路)上, 小连通块按 keep_ratio 概率整块留/删,
-        大连通块 BFS 生长补足. 保持已知路网连续性不破碎, 块数接近 GT.
-        然后对齐到 subdivided 图: 整条路段的所有细分段一起留/删, 保证两级一致.
-
+        同时保存 subdivided 图和原始图两个级别的已知边集合, 确保渲染和标签一致.
         训练时不固定 seed (每 epoch refresh 随机, 数据增强);
         推理 generate_partial_prior.py 用固定 seed 42 (可复现).
+
+        注: 曾试 component(按连通块保)采样, 但每epoch整块留/删导致训练目标
+        剧烈波动, val_loss 震荡, APLS 退化(0.588→0.457). 回退按边随机.
+        详见 docs/component采样退化分析.md.
         """
         self.current_keep_ratio = random.uniform(*self.keep_ratio_range)
-        rng = random  # 训练用全局 random, 每 epoch 不同 (数据增强)
 
-        # ---- 原始图级别: 按连通块保采样 ----
-        # full_graph_origin 是 igraph (坐标已 coord_transform 成 x,y)
-        n_orig = self.full_graph_origin.vcount()
-        all_edges_orig_idx = [e.tuple for e in self.full_graph_origin.es]
-        target = int(len(all_edges_orig_idx) * self.current_keep_ratio)
+        # ---- Subdivided 图级别的删边 ----
+        all_edges_sub = [e.tuple for e in self.full_graph_subdivide.es]
+        keep_num_sub = int(len(all_edges_sub) * self.current_keep_ratio)
+        kept_edges_sub = random.sample(all_edges_sub, min(keep_num_sub, len(all_edges_sub)))
 
-        # 连通分量 (igraph), 按大小降序
-        comps = self.full_graph_origin.connected_components(mode='weak')
-        comp_sizes = comps.sizes()
-        # 每个分量的边
-        comp_edges = [[] for _ in range(len(comp_sizes))]
-        for e in self.full_graph_origin.es:
-            comp_edges[comps.membership[e.source]].append((e.source, e.target))
-        # 按边数降序
-        comp_order = sorted(range(len(comp_edges)), key=lambda i: len(comp_edges[i]), reverse=True)
-
-        kept_orig_idx = []  # 保留的原始图边 (igraph 节点索引对)
-        threshold = max(1, target * 0.3)
-        for ci in comp_order:
-            edges = comp_edges[ci]
-            if len(edges) <= threshold:
-                # 小块: 按 keep_ratio 概率整块留/删
-                if rng.random() < self.current_keep_ratio:
-                    kept_orig_idx.extend(edges)
-            else:
-                # 大块: BFS 生长补足
-                remaining = target - len(kept_orig_idx)
-                if remaining <= 0:
-                    break
-                need = min(remaining, int(len(edges) * self.current_keep_ratio))
-                # BFS 生长 (igraph)
-                nodes_in_comp = [v for v in range(n_orig) if comps.membership[v] == ci]
-                rng.shuffle(nodes_in_comp)
-                start = nodes_in_comp[0] if nodes_in_comp else None
-                if start is None:
-                    continue
-                visited = {start}
-                queue = [start]
-                tree = []
-                sub_edges_set = set(tuple(sorted(e)) for e in edges)
-                while queue and len(tree) < need:
-                    node = queue.pop(0)
-                    for nb in self.full_graph_origin.neighbors(node):
-                        if nb not in visited and tuple(sorted((node, nb))) in sub_edges_set:
-                            visited.add(nb)
-                            tree.append((node, nb))
-                            queue.append(nb)
-                            if len(tree) >= need:
-                                break
-                kept_orig_idx.extend(tree)
-
-        # 原始图已知边集合 (坐标 tuple, 用于 render road_feature_map)
-        orig_points = self.full_graph_origin.vs['point']
-        self.known_edges_original = set()
-        for s, t in kept_orig_idx:
-            ps = tuple(orig_points[s])
-            pt = tuple(orig_points[t])
-            self.known_edges_original.add((min(ps, pt), max(ps, pt)))
-
-        # ---- Subdivided 图级别: 对齐原始图 (整条路段的所有细分段一起留/删) ----
-        # 原始节点在 subdivided 图里是前 n_orig 个 (subdivide_graph 保留原始节点在前)
-        # 对每条保留的原始路段, 在 subdivided 图里找对应路径, 整段保留
         self.known_edge_set_subdivide = set()
-        # 建立 原始节点坐标 -> subdivided 节点索引 的映射 (原始节点在前 n_orig)
-        for s, t in kept_orig_idx:
-            # s, t 是原始图 igraph 索引, subdivided 图前 n_orig 个是原始节点, 索引一致
-            # 找 subdivided 图里 s->t 的路径 (subdivide 生成的细分路径)
-            try:
-                paths = self.full_graph_subdivide.get_shortest_paths(s, to=t)
-                if paths and len(paths[0]) > 1:
-                    path = paths[0]
-                    for i in range(len(path) - 1):
-                        a, b = path[i], path[i + 1]
-                        self.known_edge_set_subdivide.add((min(a, b), max(a, b)))
-            except Exception:
-                # 路径查找失败时, 至少保留原始节点对 (若直接相邻)
-                self.known_edge_set_subdivide.add((min(s, t), max(s, t)))
+        for src, tgt in kept_edges_sub:
+            self.known_edge_set_subdivide.add((min(src, tgt), max(src, tgt)))
+
+        # ---- 原始图级别的删边 (用于渲染 road_feature_map) ----
+        # 收集原始图的所有边
+        all_edges_orig = []
+        for node, neighbors in self.full_graph_adj_original.items():
+            for neighbor in neighbors:
+                edge = (min(node, neighbor), max(node, neighbor))
+                all_edges_orig.append(edge)
+        all_edges_orig = list(set(all_edges_orig))
+
+        keep_num_orig = int(len(all_edges_orig) * self.current_keep_ratio)
+        kept_edges_orig = random.sample(all_edges_orig, min(keep_num_orig, len(all_edges_orig)))
+
+        self.known_edges_original = set(kept_edges_orig)
 
     def refresh_known_graph(self):
         """每个 epoch 调用, 重新随机删边"""
