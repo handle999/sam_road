@@ -230,7 +230,8 @@ def main():
     parser.add_argument("--keep_ratio", type=float, default=0.5,
                         help="Ratio of edges to keep (0.0 to 1.0). Default is 0.5 (50%).")
     parser.add_argument("--thickness", type=int, default=3,
-                        help="Line thickness for rendered PNG. Default is 3.")
+                        help="Line thickness for rendered PNG. 默认3, 须与 generate_labels.py 的 ROAD_WIDTH 一致"
+                             "(P2CNet 等像素级方法用此 PNG 作为 skeleton, 线宽要和 GT road_mask 对齐).")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducible sampling (infer 需固定). Default 42.")
     parser.add_argument("--strategy", type=str, default='edge_random',
