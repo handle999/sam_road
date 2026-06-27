@@ -10,7 +10,7 @@ import copy
 import networkx as nx
 
 class PartialGraphSampler:
-    def __init__(self, dataset_type, keep_ratio, image_size=None, line_thickness=3,
+    def __init__(self, dataset_type, keep_ratio, image_size=None, line_thickness=2,
                  strategy='component'):
         """
         初始化路网采样器
@@ -229,9 +229,12 @@ def main():
                         help="Directory to save sampled .p (and .png if --viz) files.")
     parser.add_argument("--keep_ratio", type=float, default=0.5,
                         help="Ratio of edges to keep (0.0 to 1.0). Default is 0.5 (50%).")
-    parser.add_argument("--thickness", type=int, default=3,
-                        help="Line thickness for rendered PNG. 默认3, 须与 generate_labels.py 的 ROAD_WIDTH 一致"
-                             "(P2CNet 等像素级方法用此 PNG 作为 skeleton, 线宽要和 GT road_mask 对齐).")
+    parser.add_argument("--thickness", type=int, default=2,
+                        help="Line thickness for rendered PNG. 默认2, 对齐 prepare_dataset 的 gt.png"
+                             "(graphVis2048Segmentation thickness=2) 和 DelvMap (road_width=2)."
+                             "P2CNet 等像素级方法用此 PNG 作 skeleton, 须和 gt.png 线宽一致."
+                             "注意: sam_road 的 road_mask (训练标签) 用 ROAD_WIDTH=3, 但那是另一套,"
+                             "P2CNet 不用 road_mask, 用 gt.png+partial.png (都2).")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducible sampling (infer 需固定). Default 42.")
     parser.add_argument("--strategy", type=str, default='edge_random',
