@@ -1,7 +1,7 @@
 run_id: completion_didi_xian_rnonly_ep9
 task: completion
 dataset: didi_xian
-created_at: '2026-06-25 10:55:05'
+created_at: '2026-06-28 17:28:23'
 config_source: config/toponet_vitb_256_didi_xian_completion.yaml
 config_snapshot: 'DATASET: ''didi_xian''
 
@@ -121,7 +121,7 @@ config_snapshot: 'DATASET: ''didi_xian''
 steps_requested:
 - infer
 - eval
-gpus: '3'
+gpus: '5'
 precision: '32'
 epochs: null
 patience: null
@@ -140,7 +140,7 @@ task_info:
   model_class: SAMRoadCompletion
   ckpt_prefix: completion
 infer:
-  checkpoint: ./runs/completion_didi_xian_20260625_015832/train/checkpoints/completion-epoch=09-val_loss=0.2155.ckpt
+  checkpoint: runs/completion_didi_xian_20260628_133517/train/checkpoints/completion-epoch=09-val_loss=0.2246.ckpt
   input_graph_dir: datasets/didi/xian/2019_400
   traj_dir: null
   device: cuda
@@ -150,7 +150,7 @@ eval:
   workers: 16
   extra_opts: ''
 git:
-  commit: 5177c34
+  commit: b8b491d
   branch: main
-  dirty: false
+  dirty: true
 step_status: {}

@@ -1,0 +1,40 @@
+script: engine/inferencer_completion.py
+start_time: '2026-06-28 17:40:16'
+end_time: '2026-06-28 17:41:58'
+duration_seconds: 102.59
+host: debian
+output_dir: /home/hanhaoyu/sam_road/runs/completion_didi_xian_component_rnonly_ep9/infer
+config_source: config/toponet_vitb_256_didi_xian_completion.yaml
+checkpoint: runs/completion_didi_xian_20260628_133517/train/checkpoints/completion-epoch=09-val_loss=0.2246.ckpt
+command: CUDA_VISIBLE_DEVICES=5 /home/hanhaoyu/miniconda3/envs/SAM/bin/python /home/hanhaoyu/sam_road/engine/inferencer_completion.py
+  --config config/toponet_vitb_256_didi_xian_completion.yaml --checkpoint runs/completion_didi_xian_20260628_133517/train/checkpoints/completion-epoch=09-val_loss=0.2246.ckpt
+  --run-root runs/completion_didi_xian_component_rnonly_ep9 --device cuda --input_graph_dir
+  datasets/didi/xian/2019_400/partial_component
+cli_args:
+  checkpoint: runs/completion_didi_xian_20260628_133517/train/checkpoints/completion-epoch=09-val_loss=0.2246.ckpt
+  run_root: runs/completion_didi_xian_component_rnonly_ep9
+  config: config/toponet_vitb_256_didi_xian_completion.yaml
+  output_dir: null
+  input_graph: null
+  input_graph_dir: datasets/didi/xian/2019_400/partial_component
+  traj_dir: null
+  device: cuda
+env:
+  cuda_visible_devices: '5'
+  omp_num_threads: <not set>
+  mkl_num_threads: <not set>
+  ld_preload: /home/hanhaoyu/miniconda3/envs/SAM/lib/libstdc++.so.6
+  conda_env: SAM
+  python_version: 3.10.19
+  platform: Linux-6.1.0-42-amd64-x86_64-with-glibc2.36
+git:
+  commit: b8b491d
+  branch: main
+  dirty: true
+torch:
+  torch_version: 2.1.2+cu121
+  cuda_available: true
+  cuda_device_count: 1
+  cuda_version: '12.1'
+task: inference
+model: sam_road_completion

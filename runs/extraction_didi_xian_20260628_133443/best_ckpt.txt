@@ -1,0 +1,1 @@
+runs/extraction_didi_xian_20260628_133443/train/checkpoints/epoch-epoch=01-val_loss=0.1761.ckpt

@@ -1,0 +1,1 @@
+Inference completed for config/toponet_vitb_256_didi_xian.yaml in 111.86771559715271 seconds.
