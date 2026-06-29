@@ -153,9 +153,12 @@ def main():
     if args.dataset == 'didi':
         sat_tmpl = 'region_{}_sat.png'
         graph_tmpl = 'region_{}_refine_gt_graph.p'
+        # 评测GT: graph_gt.pickle (APLS/TOPO 评测用, 也需裁剪对齐)
+        eval_gt_tmpl = 'region_{}_graph_gt.pickle'
     else:
         sat_tmpl = '{}__rgb.png'
         graph_tmpl = '{}__gt_graph.p'
+        eval_gt_tmpl = None  # spacenet 评测GT和训练GT同一个文件
 
     # 找所有 region id
     import json
@@ -169,6 +172,7 @@ def main():
     clipped = 0
     no_black = 0
     for img_id in all_ids:
+        # 1. 裁训练GT (refine_gt_graph.p)
         result = process_region(args.input_dir, img_id, sat_tmpl, graph_tmpl, args.dry_run)
         if result is None:
             continue
@@ -178,13 +182,20 @@ def main():
             clipped += 1
             _, old_e, new_e, bbox = result
             if args.dry_run:
-                print(f'  region_{img_id}: bbox={bbox} edges {old_e}→{new_e} (删{old_e-new_e})')
+                print(f'  region_{img_id}: bbox={bbox} refine edges {old_e}→{new_e} (删{old_e-new_e})')
+
+        # 2. 裁评测GT (graph_gt.pickle, didi_xian 才有, 评测用)
+        if eval_gt_tmpl is not None:
+            result2 = process_region(args.input_dir, img_id, sat_tmpl, eval_gt_tmpl, args.dry_run)
+            if result2 is not None and result2[0] == 'clipped' and args.dry_run:
+                _, old_e2, new_e2, _ = result2
+                print(f'  region_{img_id}: graph_gt edges {old_e2}→{new_e2} (删{old_e2-new_e2})')
 
     print(f'\n汇总: {clipped} 个 region 有黑边需裁剪, {no_black} 个无黑边')
     if args.dry_run:
         print('(dry-run, 未写文件. 去掉 --dry-run 执行裁剪)')
     else:
-        print('✓ 裁剪完成, 原 .p 已备份为 .bak')
+        print('✓ 裁剪完成 (refine_gt_graph.p + graph_gt.pickle), 原文件备份为 .bak')
         print('下一步: 重新生成 road_mask/gt.png/partial (跑 generate_labels + generate_partial_prior)')
 
 
