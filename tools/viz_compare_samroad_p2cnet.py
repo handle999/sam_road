@@ -38,6 +38,10 @@ RGB = Tuple[int, int, int]
 
 YELLOW: RGB = (255, 220, 0)
 CYAN: RGB = (0, 255, 255)
+# triage-style colors, matching postprocess/triage.py infer visualization:
+# edge BGR (15,160,253) -> RGB (253,160,15); node BGR (0,255,255) -> RGB (255,255,0)
+TRIAGE_EDGE: RGB = (253, 160, 15)
+TRIAGE_NODE: RGB = (255, 255, 0)
 BLACK: RGB = (0, 0, 0)
 RED: RGB = (255, 60, 40)
 GREEN: RGB = (30, 220, 80)
@@ -111,16 +115,17 @@ def add_title(panel: np.ndarray, title: str, h: int = 32) -> np.ndarray:
     return np.vstack([title_bar, panel])
 
 
-def mask_as_color(mask: Optional[np.ndarray], size: int, color: RGB = RED, bg: RGB = WHITE) -> np.ndarray:
+def mask_as_binary(mask: Optional[np.ndarray], size: int) -> np.ndarray:
+    """Triage-style binary mask: road=255, background=0 (single channel replicated to RGB)."""
     if mask is None:
         return ensure_rgb(None, size, 'Missing mask')
     m = resize_img(mask, size)
-    out = np.full((size, size, 3), bg, dtype=np.uint8)
-    out[m > 0] = color
+    out = np.zeros((size, size, 3), dtype=np.uint8)
+    out[m > 0] = WHITE
     return out
 
 
-def overlay_mask(rgb: Optional[np.ndarray], mask: Optional[np.ndarray], size: int, color: RGB = RED, alpha: float = 0.45) -> np.ndarray:
+def overlay_mask(rgb: Optional[np.ndarray], mask: Optional[np.ndarray], size: int, color: RGB = WHITE, alpha: float = 1.0) -> np.ndarray:
     base = ensure_rgb(rgb, size, 'Missing sat')
     if mask is None:
         return base
@@ -153,8 +158,8 @@ def node_to_xy(node) -> Tuple[int, int]:
 
 
 def draw_graph(rgb: Optional[np.ndarray], adj: Dict, size: int,
-               edge_color: RGB = YELLOW, node_color: RGB = CYAN,
-               edge_thick: int = 3, node_radius: int = 3) -> np.ndarray:
+               edge_color: RGB = TRIAGE_EDGE, node_color: RGB = TRIAGE_NODE,
+               edge_thick: int = 4, node_radius: int = 4) -> np.ndarray:
     img = ensure_rgb(rgb, size, 'Missing sat')
     scale_x = size / 400.0
     scale_y = size / 400.0
@@ -164,16 +169,6 @@ def draw_graph(rgb: Optional[np.ndarray], adj: Dict, size: int,
         return int(round(x * scale_x)), int(round(y * scale_y))
 
     drawn = set()
-    # black shadow first
-    for node, nbs in adj.items():
-        for nb in nbs:
-            edge = tuple(sorted((tuple(node), tuple(nb))))
-            if edge in drawn:
-                continue
-            drawn.add(edge)
-            p0, p1 = scale_pt(node), scale_pt(nb)
-            cv2.line(img, p0, p1, BLACK, edge_thick + 3, cv2.LINE_AA)
-    drawn.clear()
     for node, nbs in adj.items():
         for nb in nbs:
             edge = tuple(sorted((tuple(node), tuple(nb))))
@@ -185,7 +180,6 @@ def draw_graph(rgb: Optional[np.ndarray], adj: Dict, size: int,
     # nodes
     for node in adj.keys():
         p = scale_pt(node)
-        cv2.circle(img, p, node_radius + 2, BLACK, -1, cv2.LINE_AA)
         cv2.circle(img, p, node_radius, node_color, -1, cv2.LINE_AA)
     return img
 
@@ -257,8 +251,8 @@ def panel_for_id(tile_id: str, args, idx_map: Dict[str, int]) -> Optional[np.nda
         ('Partial prior', overlay_mask(sat, partial, size, CYAN, 0.45)),
         ('Trajectory', traj_overlay(sat, traj, size)),
         ('GT graph', draw_graph(sat, gt_graph, size, GREEN, CYAN)),
-        ('P2CNet mask', mask_as_color(p2c_mask, size, RED)),
-        ('P2CNet mask overlay', overlay_mask(sat, p2c_mask, size, RED, 0.45)),
+        ('P2CNet mask', mask_as_binary(p2c_mask, size)),
+        ('P2CNet mask overlay', overlay_mask(sat, p2c_mask, size, WHITE, 1.0)),
         ('P2CNet graph', graph_on_blank(p2c_graph, size)),
         ('P2CNet graph overlay', draw_graph(sat, p2c_graph, size)),
         ('SAMRoad extraction', draw_graph(sat, sam_ext, size)),
